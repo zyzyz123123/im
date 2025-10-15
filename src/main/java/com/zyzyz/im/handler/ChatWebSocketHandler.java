@@ -1,5 +1,8 @@
 package com.zyzyz.im.handler;
 
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
@@ -11,6 +14,8 @@ import org.springframework.stereotype.Component;
 
 import com.zyzyz.im.manager.WebsocketSessionManager;
 import com.zyzyz.im.dto.ChatMessage;
+import com.zyzyz.im.service.MessageService;
+import com.zyzyz.im.entity.Message;
 
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
@@ -20,6 +25,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private MessageService messageService;
     
     @Override
     public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
@@ -44,6 +52,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String toUserId = chatMessage.getToUserId();
 
         WebSocketSession targetUserSession = websocketSessionManager.getSession(toUserId);
+
+        messageService.insert(Message.builder()
+        .fromUserId(chatMessage.getFromUserId())
+        .toUserId(chatMessage.getToUserId())
+        .content(chatMessage.getMessage())
+        .messageId(UUID.randomUUID().toString())
+        .messageType(1)
+        .status(0)
+        .createdAt(LocalDateTime.now())
+        .build());
 
         if (targetUserSession != null && targetUserSession.isOpen()) {
             targetUserSession.sendMessage(new TextMessage(payload));

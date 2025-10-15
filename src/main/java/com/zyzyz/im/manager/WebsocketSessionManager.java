@@ -1,13 +1,11 @@
 package com.zyzyz.im.manager;
 
-import java.io.IOException;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.stereotype.Component;
-
-import com.zyzyz.im.dto.ChatMessage;
 
 @Component
 public class WebsocketSessionManager {
@@ -27,6 +25,10 @@ public class WebsocketSessionManager {
 
     public boolean isOnline(String userId) {
         return onlineUsers.containsKey(userId);
+    }
+
+    public List<String> getOnlineUsers() {
+        return new ArrayList<>(onlineUsers.keySet());
     }
     
 }
