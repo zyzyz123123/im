@@ -1,0 +1,79 @@
+package com.zyzyz.im.handler;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.stereotype.Component;
+
+import com.zyzyz.im.manager.WebsocketSessionManager;
+import com.zyzyz.im.dto.ChatMessage;
+
+@Component
+public class ChatWebSocketHandler extends TextWebSocketHandler {
+
+    @Autowired
+    private WebsocketSessionManager websocketSessionManager;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+    
+    @Override
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
+        super.afterConnectionEstablished(session);
+        String userId = getUserIdFromSession(session);
+        websocketSessionManager.addSession(userId, session);
+    }
+    
+    @Override
+    public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) throws Exception {
+        super.afterConnectionClosed(session, status);
+        String userId = getUserIdFromSession(session);
+        websocketSessionManager.removeSession(userId);
+    }
+
+    @Override
+    public void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message) throws Exception {
+        super.handleTextMessage(session, message);
+        String payload = message.getPayload();
+        ChatMessage chatMessage = objectMapper.readValue(payload, ChatMessage.class);
+        
+        String toUserId = chatMessage.getToUserId();
+
+        WebSocketSession targetUserSession = websocketSessionManager.getSession(toUserId);
+
+        if (targetUserSession != null && targetUserSession.isOpen()) {
+            targetUserSession.sendMessage(new TextMessage(payload));
+        } else {
+            System.out.println("targetUserSession is null or closed");
+        }
+    }
+
+    @Override
+    public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) throws Exception {
+        super.handleTransportError(session, exception);
+        String userId = getUserIdFromSession(session);
+        websocketSessionManager.removeSession(userId);
+    }
+
+    private String getUserIdFromSession(WebSocketSession session) {
+        String query = session.getUri().getQuery();
+        if (query == null) {
+            return null;
+        }
+        
+        // 按 & 分割参数
+        String[] params = query.split("&");
+        for (String param : params) {
+            if (param.startsWith("userId=")) {
+                return param.substring(7);  // 去掉 "userId="
+            }
+        }
+        
+        return null;
+    }
+    
+}
