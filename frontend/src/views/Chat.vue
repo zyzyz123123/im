@@ -96,10 +96,10 @@
             <h3>与 {{ currentChatUser }} 聊天</h3>
             <el-button 
               size="small" 
-              @click="loadHistory"
-              :loading="loadingHistory"
+              type="info"
+              @click="closeChat"
             >
-              刷新历史
+              关闭
             </el-button>
           </div>
           
@@ -168,7 +168,6 @@
   const unreadCount = reactive({}) // { userId: count }
   const inputMessage = ref('')
   const messageListRef = ref(null)
-  const loadingHistory = ref(false)
   
   // 当前聊天消息
   const currentMessages = computed(() => {
@@ -267,7 +266,6 @@
   const loadHistory = async () => {
     if (!currentChatUser.value) return
     
-    loadingHistory.value = true
     try {
       const response = await messageApi.getChatHistory(
         userStore.userId, 
@@ -283,8 +281,6 @@
     } catch (error) {
       console.error('加载历史消息失败:', error)
       ElMessage.error('加载历史消息失败')
-    } finally {
-      loadingHistory.value = false
     }
   }
   
@@ -433,6 +429,11 @@
         minute: '2-digit' 
       })
     }
+  }
+  
+  // 关闭当前聊天
+  const closeChat = () => {
+    currentChatUser.value = ''
   }
   
   // 退出登录
