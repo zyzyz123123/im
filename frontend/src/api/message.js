@@ -7,7 +7,8 @@ const BASE_URL = 'http://localhost:8080'
 // 创建axios实例
 const request = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000
+  timeout: 10000,
+  withCredentials: true  // 携带 Cookie（Session）
 })
 
 // 响应拦截器：统一处理后端 Result 格式

@@ -109,7 +109,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     /**
      * 从 session 的 attributes 中获取 userId
-     * userId 是在 JwtHandshakeInterceptor 中从 token 解析后放入的
+     * userId 是在 SessionHandshakeInterceptor 中从 HTTP Session 读取后放入的
      */
     private String getUserIdFromSession(WebSocketSession session) {
         return (String) session.getAttributes().get("userId");

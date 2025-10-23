@@ -2,7 +2,6 @@ class WebSocketClient {
   constructor() {
     this.ws = null
     this.userId = ''
-    this.token = ''
     this.messageHandlers = []
     this.reconnectAttempts = 0
     this.maxReconnectAttempts = 5
@@ -10,14 +9,13 @@ class WebSocketClient {
     this.isManualClose = false
   }
   
-  // 连接WebSocket（使用 token 鉴权）
-  connect(userId, token) {
+  // 连接WebSocket（使用 Session 鉴权，Cookie 会自动发送）
+  connect(userId) {
     return new Promise((resolve, reject) => {
       this.userId = userId
-      this.token = token
       this.isManualClose = false
       
-      const wsUrl = `ws://localhost:8080/ws?token=${token}`
+      const wsUrl = `ws://localhost:8080/ws`
       
       this.ws = new WebSocket(wsUrl)
       
@@ -66,7 +64,7 @@ class WebSocketClient {
     console.log(`正在尝试重连... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
     
     setTimeout(() => {
-      this.connect(this.userId, this.token)
+      this.connect(this.userId)
         .then(() => {
           console.log('重连成功')
         })

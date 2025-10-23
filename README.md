@@ -5,7 +5,7 @@
 ## ✨ 主要功能
 
 - 💬 实时聊天（WebSocket）
-- 🔐 用户登录/注册（JWT + BCrypt）
+- 🔐 用户登录/注册（Session + BCrypt）
 - 🟢 在线状态显示
 - 📱 最近联系人列表
 - ✅ 消息已读/未读
@@ -13,7 +13,7 @@
 
 ## 🛠️ 技术栈
 
-**后端：** Spring Boot、WebSocket、MyBatis、MySQL、JWT
+**后端：** Spring Boot、WebSocket、MyBatis、MySQL、Redis、Spring Session
 
 **前端：** Vue 3、Element Plus、Pinia、Vite
 
@@ -52,14 +52,24 @@ CREATE TABLE t_message (
 );
 ```
 
-### 2. 后端配置
+# Windows
+# 下载 Redis for Windows 并启动
+```
+
+### 3. 后端配置
 
 修改 `backend/src/main/resources/application.properties`：
 
 ```properties
+# MySQL 配置
 spring.datasource.url=jdbc:mysql://localhost:3306/im
 spring.datasource.username=root
 spring.datasource.password=your_password
+
+# Redis 配置
+spring.redis.host=localhost
+spring.redis.port=6379
+spring.redis.password=
 ```
 
 ### 3. 启动项目
@@ -95,11 +105,13 @@ npm run dev
 
 ## 🎯 技术亮点
 
-- ✅ 前后端分离
+- ✅ 前后端分离架构
 - ✅ WebSocket 实时通信
-- ✅ JWT 无状态认证
+- ✅ Spring Session + Redis 会话管理
+- ✅ 登出立即生效（无需 Token 黑名单）
 - ✅ 断线自动重连
-- ✅ 消息持久化
+- ✅ 消息持久化（MySQL）
+- ✅ 分布式 Session（Redis）
 - ✅ 现代化 UI 设计
 
 ## 📝 License

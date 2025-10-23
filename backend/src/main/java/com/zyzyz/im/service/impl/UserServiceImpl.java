@@ -12,16 +12,12 @@ import com.zyzyz.im.dto.LoginResponse;
 import com.zyzyz.im.entity.User;
 import com.zyzyz.im.mapper.UserMapper;
 import com.zyzyz.im.service.UserService;
-import com.zyzyz.im.util.JwtUtil;
 
 @Service
 public class UserServiceImpl implements UserService {
     
     @Autowired
     private UserMapper userMapper;
-
-    @Autowired
-    private JwtUtil jwtUtil;
 
     @Autowired
     private BCryptPasswordEncoder passwordEncoder;
@@ -49,8 +45,8 @@ public class UserServiceImpl implements UserService {
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
             throw new RuntimeException("密码错误");
         }
+        // Session 将在 Controller 层设置
         return LoginResponse.builder()
-        .token(jwtUtil.generateToken(user.getUserId()))
         .userId(user.getUserId())
         .nickname(user.getNickname())
         .avatar(user.getAvatar())

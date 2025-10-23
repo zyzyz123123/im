@@ -8,7 +8,8 @@ const authAPI = axios.create({
   timeout: 5000,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true  // 携带 Cookie（Session）
 })
 
 // 响应拦截器：统一处理后端 Result 格式
@@ -60,5 +61,12 @@ export function login(data) {
     userId: data.userId,
     password: data.password
   })
+}
+
+/**
+ * 用户登出
+ */
+export function logout() {
+  return authAPI.post('/auth/logout')
 }
 

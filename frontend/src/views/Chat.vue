@@ -153,6 +153,7 @@
   import { useUserStore } from '../stores/user'
   import { messageApi } from '../api/message'
   import { wsClient } from '../api/websocket'
+  import { logout as logoutApi } from '../api/auth'
   import { ElMessage } from 'element-plus'
   
   const router = useRouter()
@@ -185,8 +186,8 @@
     }
     
     try {
-      // 连接WebSocket（使用 token 鉴权）
-      await wsClient.connect(userStore.userId, userStore.token)
+      // 连接WebSocket（使用 Session 鉴权，Cookie 会自动发送）
+      await wsClient.connect(userStore.userId)
       ElMessage.success('连接成功')
       
       // 监听消息
@@ -435,11 +436,28 @@
   }
   
   // 退出登录
-  const handleLogout = () => {
-    wsClient.disconnect()
-    userStore.logout()
-    router.push('/login')
-    ElMessage.success('已退出登录')
+  const handleLogout = async () => {
+    try {
+      // 调用后端登出接口（清除 Session）
+      await logoutApi()
+      
+      // 断开 WebSocket
+      wsClient.disconnect()
+      
+      // 清除前端状态
+      userStore.logout()
+      
+      // 跳转到登录页
+      router.push('/login')
+      
+      ElMessage.success('已退出登录')
+    } catch (error) {
+      console.error('登出失败:', error)
+      // 即使后端失败，也清除前端状态
+      wsClient.disconnect()
+      userStore.logout()
+      router.push('/login')
+    }
   }
   </script>
   
