@@ -3,7 +3,7 @@
       <!-- 左侧：在线用户列表 -->
       <div class="user-list">
         <div class="user-list-header">
-          <h3>在线用户</h3>
+          <h3>消息</h3>
           <el-button 
             type="danger" 
             size="small" 
@@ -14,26 +14,66 @@
         </div>
         
         <div class="current-user">
-          <el-tag type="success">当前用户：{{ userStore.userId }}</el-tag>
+          <el-tag type="success">{{ userStore.nickname }}</el-tag>
         </div>
         
-        <el-divider />
+        <!-- 标签页切换 -->
+        <el-tabs v-model="activeTab" class="user-tabs">
+          <el-tab-pane label="最近聊天" name="recent"></el-tab-pane>
+          <el-tab-pane label="在线用户" name="online"></el-tab-pane>
+        </el-tabs>
         
-        <div class="online-users">
+        <!-- 最近聊天列表 -->
+        <div v-show="activeTab === 'recent'" class="online-users">
+          <div 
+            v-for="user in recentContacts" 
+            :key="user"
+            :class="['user-item', { active: currentChatUser === user }]"
+            @click="selectUser(user)"
+          >
+            <div class="user-avatar">
+              <div class="avatar-circle">{{ user.charAt(0).toUpperCase() }}</div>
+              <span :class="['status-dot', { online: onlineUsers.includes(user), offline: !onlineUsers.includes(user) }]"></span>
+            </div>
+            <div class="user-info">
+              <span class="user-name">{{ user }}</span>
+              <el-badge 
+                v-if="unreadCount[user] > 0" 
+                :value="unreadCount[user]" 
+                :max="99"
+                class="unread-badge"
+              />
+            </div>
+          </div>
+          
+          <el-empty 
+            v-if="recentContacts.length === 0" 
+            description="暂无聊天记录"
+            :image-size="80"
+          />
+        </div>
+        
+        <!-- 在线用户列表 -->
+        <div v-show="activeTab === 'online'" class="online-users">
           <div 
             v-for="user in onlineUsers" 
             :key="user"
             :class="['user-item', { active: currentChatUser === user }]"
             @click="selectUser(user)"
           >
-            <el-badge 
-              v-if="unreadCount[user] > 0" 
-              :value="unreadCount[user]" 
-              class="user-badge"
-            >
-              <span>{{ user }}</span>
-            </el-badge>
-            <span v-else>{{ user }}</span>
+            <div class="user-avatar">
+              <div class="avatar-circle">{{ user.charAt(0).toUpperCase() }}</div>
+              <span class="status-dot online"></span>
+            </div>
+            <div class="user-info">
+              <span class="user-name">{{ user }}</span>
+              <el-badge 
+                v-if="unreadCount[user] > 0" 
+                :value="unreadCount[user]" 
+                :max="99"
+                class="unread-badge"
+              />
+            </div>
           </div>
           
           <el-empty 
@@ -70,12 +110,11 @@
               :key="msg.id || msg.createdAt"
               :class="['message-item', msg.fromUserId === userStore.userId ? 'sent' : 'received']"
             >
-              <div class="message-info">
-                <span class="sender">{{ msg.fromUserId }}</span>
-                <span class="time">{{ formatTime(msg.createdAt) }}</span>
-              </div>
-              <div class="message-content">
-                {{ msg.content }}
+              <div class="message-bubble">
+                <div class="message-content">
+                  {{ msg.content }}
+                </div>
+                <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
               </div>
             </div>
             
@@ -92,15 +131,15 @@
               v-model="inputMessage"
               type="textarea"
               :rows="3"
-              placeholder="输入消息..."
-              @keydown.ctrl.enter="sendMessage"
+              placeholder="输入消息（Enter 发送，Shift+Enter 换行）"
+              @keydown.enter="handleEnterKey"
             />
             <el-button 
               type="primary" 
               @click="sendMessage"
               :disabled="!inputMessage.trim()"
             >
-              发送 (Ctrl+Enter)
+              发送 (Enter)
             </el-button>
           </div>
         </template>
@@ -120,7 +159,9 @@
   const userStore = useUserStore()
   
   // 状态
-  const onlineUsers = ref([])
+  const activeTab = ref('recent')  // 当前标签页：recent 或 online
+  const onlineUsers = ref([])  // 在线用户列表
+  const recentContacts = ref([])  // 最近联系人列表
   const currentChatUser = ref('')
   const messages = reactive({}) // { userId: [messages] }
   const unreadCount = reactive({}) // { userId: count }
@@ -144,15 +185,16 @@
     }
     
     try {
-      // 连接WebSocket
-      await wsClient.connect(userStore.userId)
+      // 连接WebSocket（使用 token 鉴权）
+      await wsClient.connect(userStore.userId, userStore.token)
       ElMessage.success('连接成功')
       
       // 监听消息
       wsClient.onMessage(handleReceiveMessage)
       
-      // 加载在线用户
+      // 加载在线用户和最近联系人
       await loadOnlineUsers()
+      await loadRecentContacts()
     } catch (error) {
       console.error('初始化失败:', error)
       ElMessage.error('连接失败，请重新登录')
@@ -169,12 +211,28 @@
   const loadOnlineUsers = async () => {
     try {
       const response = await messageApi.getOnlineUsers()
-      const users = response.data
+      // 拦截器已自动提取 Result.data
+      const users = response.data || []
       
       // 过滤掉自己
       onlineUsers.value = users.filter(u => u !== userStore.userId)
+      
+      console.log('在线用户列表:', onlineUsers.value)
     } catch (error) {
       console.error('加载在线用户失败:', error)
+    }
+  }
+  
+  // 加载最近联系人列表
+  const loadRecentContacts = async () => {
+    try {
+      const response = await messageApi.getRecentContacts(userStore.userId)
+      // 拦截器已自动提取 Result.data
+      recentContacts.value = response.data || []
+      
+      console.log('最近联系人列表:', recentContacts.value)
+    } catch (error) {
+      console.error('加载最近联系人失败:', error)
     }
   }
   
@@ -215,6 +273,7 @@
         currentChatUser.value
       )
       
+      // 拦截器已自动提取 Result.data
       messages[currentChatUser.value] = response.data || []
       
       // 滚动到底部
@@ -226,6 +285,18 @@
     } finally {
       loadingHistory.value = false
     }
+  }
+  
+  // 处理 Enter 键
+  const handleEnterKey = (event) => {
+    // 如果按了 Shift+Enter，允许换行（不阻止默认行为）
+    if (event.shiftKey) {
+      return
+    }
+    
+    // 否则阻止默认换行，发送消息
+    event.preventDefault()
+    sendMessage()
   }
   
   // 发送消息
@@ -259,6 +330,30 @@
   
   // 接收消息
   const handleReceiveMessage = (message) => {
+    // 处理系统消息：用户上线
+    if (message.type === 'user_online') {
+      const newUserId = message.fromUserId
+      if (!onlineUsers.value.includes(newUserId) && newUserId !== userStore.userId) {
+        onlineUsers.value.push(newUserId)
+        ElMessage.success(`${newUserId} 上线了`)
+        console.log('用户上线:', newUserId)
+      }
+      return
+    }
+    
+    // 处理系统消息：用户下线
+    if (message.type === 'user_offline') {
+      const offlineUserId = message.fromUserId
+      const index = onlineUsers.value.indexOf(offlineUserId)
+      if (index > -1) {
+        onlineUsers.value.splice(index, 1)
+        ElMessage.info(`${offlineUserId} 下线了`)
+        console.log('用户下线:', offlineUserId)
+      }
+      return
+    }
+    
+    // 处理聊天消息
     const fromUser = message.fromUserId
     
     // 初始化消息数组
@@ -271,6 +366,11 @@
       ...message,
       content: message.message
     })
+    
+    // 更新最近联系人列表（如果不在列表中，添加到最前面）
+    if (!recentContacts.value.includes(fromUser)) {
+      recentContacts.value.unshift(fromUser)
+    }
     
     // 如果不是当前聊天用户，增加未读数量
     if (fromUser !== currentChatUser.value) {
@@ -300,12 +400,32 @@
     const date = new Date(dateString)
     const now = new Date()
     
-    const isToday = date.toDateString() === now.toDateString()
+    // 计算时间差（天）
+    const dayDiff = Math.floor((now - date) / (1000 * 60 * 60 * 24))
+    const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     
-    if (isToday) {
-      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    } else {
+    if (dayDiff === 0) {
+      // 今天：只显示时间
+      return timeStr
+    } else if (dayDiff === 1) {
+      // 昨天
+      return `昨天 ${timeStr}`
+    } else if (dayDiff < 7) {
+      // 一周内：显示星期
+      const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+      return `${weekdays[date.getDay()]} ${timeStr}`
+    } else if (date.getFullYear() === now.getFullYear()) {
+      // 今年：月-日 时:分
       return date.toLocaleString('zh-CN', { 
+        month: '2-digit', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    } else {
+      // 往年：年-月-日 时:分
+      return date.toLocaleString('zh-CN', { 
+        year: 'numeric',
         month: '2-digit', 
         day: '2-digit', 
         hour: '2-digit', 
@@ -321,15 +441,6 @@
     router.push('/login')
     ElMessage.success('已退出登录')
   }
-  
-  // 监听在线用户变化（可选：定时刷新）
-  const refreshInterval = setInterval(() => {
-    loadOnlineUsers()
-  }, 30000) // 每30秒刷新一次
-  
-  onUnmounted(() => {
-    clearInterval(refreshInterval)
-  })
   </script>
   
   <style scoped>
@@ -364,6 +475,18 @@
     padding: 15px 20px;
   }
   
+  .user-tabs {
+    padding: 0 10px;
+  }
+  
+  .user-tabs :deep(.el-tabs__header) {
+    margin: 0;
+  }
+  
+  .user-tabs :deep(.el-tabs__nav-wrap::after) {
+    height: 1px;
+  }
+  
   .online-users {
     flex: 1;
     overflow-y: auto;
@@ -371,25 +494,92 @@
   }
   
   .user-item {
-    padding: 15px;
+    padding: 12px 15px;
     margin-bottom: 5px;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: 12px;
     transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   
   .user-item:hover {
     background: #f5f7fa;
+    transform: translateX(2px);
   }
   
   .user-item.active {
     background: #ecf5ff;
     color: #409eff;
+  }
+  
+  .user-avatar {
+    position: relative;
+    flex-shrink: 0;
+  }
+  
+  .avatar-circle {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
     font-weight: bold;
   }
   
-  .user-badge {
-    width: 100%;
+  .status-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid white;
+    border-radius: 50%;
+  }
+  
+  .status-dot.online {
+    background: #67c23a;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  
+  .status-dot.offline {
+    background: #909399;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 0.8;
+    }
+  }
+  
+  .user-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+  }
+  
+  .user-name {
+    font-size: 15px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .unread-badge {
+    flex-shrink: 0;
   }
   
   /* 右侧聊天窗口 */
@@ -427,41 +617,75 @@
   }
   
   .message-item {
-    margin-bottom: 20px;
-    max-width: 60%;
+    margin-bottom: 16px;
+    max-width: 70%;
+    display: flex;
+    animation: messageSlideIn 0.3s ease-out;
+  }
+  
+  @keyframes messageSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
   
   .message-item.sent {
     margin-left: auto;
+    justify-content: flex-end;
   }
   
   .message-item.received {
     margin-right: auto;
+    justify-content: flex-start;
   }
   
-  .message-info {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    font-size: 12px;
-    color: #909399;
+  .message-bubble {
+    display: inline-flex;
+    flex-direction: column;
+    max-width: 100%;
   }
   
   .message-content {
-    padding: 10px 15px;
-    border-radius: 8px;
+    padding: 12px 16px;
+    border-radius: 18px;
     word-break: break-word;
-    line-height: 1.5;
+    line-height: 1.6;
+    font-size: 15px;
+    position: relative;
   }
   
   .message-item.sent .message-content {
-    background: #409eff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   }
   
   .message-item.received .message-content {
     background: white;
-    border: 1px solid #e4e7ed;
+    color: #303133;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .message-time {
+    font-size: 11px;
+    color: #909399;
+    margin-top: 4px;
+    padding: 0 4px;
+  }
+  
+  .message-item.sent .message-time {
+    text-align: right;
+  }
+  
+  .message-item.received .message-time {
+    text-align: left;
   }
   
   .message-input {

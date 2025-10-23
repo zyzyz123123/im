@@ -9,8 +9,18 @@
           <el-form-item label="用户ID">
             <el-input 
               v-model="form.userId" 
-              placeholder="请输入用户ID（如：userA）"
+              placeholder="请输入用户ID"
               clearable
+            />
+          </el-form-item>
+          
+          <el-form-item label="密码">
+            <el-input 
+              v-model="form.password" 
+              type="password"
+              placeholder="请输入密码"
+              clearable
+              show-password
             />
           </el-form-item>
           
@@ -22,6 +32,15 @@
               style="width: 100%"
             >
               登录
+            </el-button>
+          </el-form-item>
+          
+          <el-form-item>
+            <el-button 
+              @click="goToRegister"
+              style="width: 100%"
+            >
+              没有账号？去注册
             </el-button>
           </el-form-item>
         </el-form>
@@ -42,33 +61,55 @@
   import { useRouter } from 'vue-router'
   import { useUserStore } from '../stores/user'
   import { ElMessage } from 'element-plus'
+  import { login } from '../api/auth'
   
   const router = useRouter()
   const userStore = useUserStore()
   
   const form = ref({
-    userId: ''
+    userId: '',
+    password: ''
   })
   
   const loading = ref(false)
   const error = ref('')
   
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    // 表单验证
     if (!form.value.userId.trim()) {
       error.value = '请输入用户ID'
+      return
+    }
+    
+    if (!form.value.password.trim()) {
+      error.value = '请输入密码'
       return
     }
     
     loading.value = true
     error.value = ''
     
-    // 简单登录，直接保存userId
-    setTimeout(() => {
-      userStore.login(form.value.userId)
+    try {
+      // 调用登录接口（拦截器已自动提取 Result.data）
+      const response = await login({
+        userId: form.value.userId,
+        password: form.value.password
+      })
+      
+      // 登录成功，保存用户信息
+      userStore.login(response.data)
       ElMessage.success('登录成功')
       router.push('/chat')
+    } catch (err) {
+      console.error('登录失败:', err)
+      error.value = err.message || '登录失败，请检查网络连接'
+    } finally {
       loading.value = false
-    }, 500)
+    }
+  }
+  
+  const goToRegister = () => {
+    router.push('/register')
   }
   </script>
   

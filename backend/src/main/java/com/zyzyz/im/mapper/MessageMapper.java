@@ -1,4 +1,3 @@
-
 package com.zyzyz.im.mapper;
 
 import java.util.List;
@@ -16,4 +15,9 @@ public interface MessageMapper {
     List<Message> selectUnreadByUserId(String userId);
     void updateStatus(@Param("messageId") String messageId, @Param("status") Integer status);
     void batchUpdateStatusByUsers(@Param("fromUserId") String fromUserId, @Param("toUserId") String toUserId);
+    
+    /**
+     * 查询用户的最近联系人列表（和该用户聊过天的所有人）
+     */
+    List<String> selectRecentContactsByUserId(String userId);
 }

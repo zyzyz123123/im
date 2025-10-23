@@ -43,4 +43,9 @@ public class MessageServiceImpl implements MessageService {
     public void batchUpdateStatusByUsers(String fromUserId, String toUserId) {
         messageMapper.batchUpdateStatusByUsers(fromUserId, toUserId);
     }
+    
+    @Override
+    public List<String> selectRecentContactsByUserId(String userId) {
+        return messageMapper.selectRecentContactsByUserId(userId);
+    }
 }

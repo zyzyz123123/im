@@ -11,4 +11,9 @@ public interface MessageService {
     List<Message> selectUnreadByUserId(String userId);
     void updateStatus(String messageId, Integer status);
     void batchUpdateStatusByUsers(String fromUserId, String toUserId);
+    
+    /**
+     * 查询用户的最近联系人列表
+     */
+    List<String> selectRecentContactsByUserId(String userId);
 }   

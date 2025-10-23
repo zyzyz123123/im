@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.zyzyz.im.service.MessageService;
 import com.zyzyz.im.entity.Message;
 import com.zyzyz.im.manager.WebsocketSessionManager;
+import com.zyzyz.im.common.Result;
 
 @RestController
 @RequestMapping("/message")
@@ -26,32 +27,44 @@ public class MessageController {
     private WebsocketSessionManager websocketSessionManager;
     
     @GetMapping("/history")
-    public List<Message> getMessages(@RequestParam String fromUserId, @RequestParam String toUserId) {
-        return messageService.selectByUsers(fromUserId, toUserId);
+    public Result<List<Message>> getMessages(@RequestParam String fromUserId, @RequestParam String toUserId) {
+        List<Message> messages = messageService.selectByUsers(fromUserId, toUserId);
+        return Result.success(messages);
     }
 
     @GetMapping("/unread")
-    public List<Message> getUnreadMessages(@RequestParam String userId) {
-        return messageService.selectUnreadByUserId(userId);
+    public Result<List<Message>> getUnreadMessages(@RequestParam String userId) {
+        List<Message> messages = messageService.selectUnreadByUserId(userId);
+        return Result.success(messages);
     }
 
     @GetMapping("/read")
-    public void readMessage(@RequestParam String messageId) {
+    public Result<Void> readMessage(@RequestParam String messageId) {
         messageService.updateStatus(messageId, 1);
+        return Result.success();
     }
 
     @PostMapping("/batchRead")
-    public void batchReadMessage(@RequestParam String fromUserId, @RequestParam String toUserId) {
+    public Result<Void> batchReadMessage(@RequestParam String fromUserId, @RequestParam String toUserId) {
         messageService.batchUpdateStatusByUsers(fromUserId, toUserId);
+        return Result.success();
     }
 
     @GetMapping("/online/users")
-    public List<String> getOnlineUsers() {
-        return websocketSessionManager.getOnlineUsers();
+    public Result<List<String>> getOnlineUsers() {
+        List<String> onlineUsers = websocketSessionManager.getOnlineUsers();
+        return Result.success(onlineUsers);
     }
 
     @GetMapping("/online/check")
-    public boolean isOnline(@RequestParam String userId) {
-        return websocketSessionManager.isOnline(userId);
+    public Result<Boolean> isOnline(@RequestParam String userId) {
+        boolean isOnline = websocketSessionManager.isOnline(userId);
+        return Result.success(isOnline);
+    }
+    
+    @GetMapping("/contacts")
+    public Result<List<String>> getRecentContacts(@RequestParam String userId) {
+        List<String> contacts = messageService.selectRecentContactsByUserId(userId);
+        return Result.success(contacts);
     }
 }

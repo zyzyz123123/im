@@ -8,6 +8,7 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 import com.zyzyz.im.handler.ChatWebSocketHandler;
+import com.zyzyz.im.interceptor.JwtHandshakeInterceptor;
 
 @Configuration
 @EnableWebSocket
@@ -15,9 +16,14 @@ public class WebSocketConfig implements WebSocketConfigurer {
     
     @Autowired
     private ChatWebSocketHandler chatWebSocketHandler;
+    
+    @Autowired
+    private JwtHandshakeInterceptor jwtHandshakeInterceptor;
 
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
-        registry.addHandler(chatWebSocketHandler, "/ws").setAllowedOrigins("*");
+        registry.addHandler(chatWebSocketHandler, "/ws")
+                .addInterceptors(jwtHandshakeInterceptor)
+                .setAllowedOrigins("*");
     }
 }

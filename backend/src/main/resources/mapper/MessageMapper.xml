@@ -21,4 +21,23 @@
     <update id="batchUpdateStatusByUsers">
         UPDATE t_message SET status = 1 WHERE to_user_id = #{toUserId} AND from_user_id = #{fromUserId} AND status = 0
     </update>
+    
+    <select id="selectRecentContactsByUserId" parameterType="string" resultType="string">
+        SELECT contact_user_id
+        FROM (
+            SELECT to_user_id as contact_user_id, MAX(created_at) as last_time
+            FROM t_message
+            WHERE from_user_id = #{userId}
+            GROUP BY to_user_id
+            
+            UNION ALL
+            
+            SELECT from_user_id as contact_user_id, MAX(created_at) as last_time
+            FROM t_message
+            WHERE to_user_id = #{userId}
+            GROUP BY from_user_id
+        ) AS contacts
+        GROUP BY contact_user_id
+        ORDER BY MAX(last_time) DESC
+    </select>
 </mapper>
