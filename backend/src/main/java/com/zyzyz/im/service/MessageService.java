@@ -16,4 +16,9 @@ public interface MessageService {
      * 查询用户的最近联系人列表
      */
     List<String> selectRecentContactsByUserId(String userId);
+    
+    /**
+     * 查询群聊历史消息
+     */
+    List<Message> selectByGroupId(String groupId);
 }   

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zyzyz.im.mapper.GroupMapper">
+    
+    <resultMap id="BaseResultMap" type="com.zyzyz.im.entity.Group">
+        <id column="id" property="id"/>
+        <result column="group_id" property="groupId"/>
+        <result column="group_name" property="groupName"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="avatar" property="avatar"/>
+        <result column="description" property="description"/>
+        <result column="member_count" property="memberCount"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+    
+    <!-- 插入群组 -->
+    <insert id="insert" parameterType="com.zyzyz.im.entity.Group">
+        INSERT INTO t_group (
+            group_id, group_name, creator_id, avatar, description, 
+            member_count, status, created_at, updated_at
+        ) VALUES (
+            #{groupId}, #{groupName}, #{creatorId}, #{avatar}, #{description},
+            #{memberCount}, #{status}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+    
+    <!-- 根据群组ID查询 -->
+    <select id="selectByGroupId" resultMap="BaseResultMap">
+        SELECT * FROM t_group WHERE group_id = #{groupId}
+    </select>
+    
+    <!-- 查询用户的所有群组 -->
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT g.* FROM t_group g
+        INNER JOIN t_group_member gm ON g.group_id = gm.group_id
+        WHERE gm.user_id = #{userId} AND g.status = 1
+        ORDER BY g.created_at DESC
+    </select>
+    
+    <!-- 更新成员数量 -->
+    <update id="updateMemberCount">
+        UPDATE t_group SET member_count = #{count}, updated_at = NOW()
+        WHERE group_id = #{groupId}
+    </update>
+    
+</mapper>
+

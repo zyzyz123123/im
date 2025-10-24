@@ -86,5 +86,12 @@ export const messageApi = {
     return request.get('/message/contacts', {
       params: { userId }
     })
+  },
+  
+  // 获取群聊历史消息
+  getGroupHistory(groupId) {
+    return request.get('/message/group/history', {
+      params: { groupId }
+    })
   }
 }

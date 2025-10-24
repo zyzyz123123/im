@@ -48,4 +48,9 @@ public class MessageServiceImpl implements MessageService {
     public List<String> selectRecentContactsByUserId(String userId) {
         return messageMapper.selectRecentContactsByUserId(userId);
     }
+    
+    @Override
+    public List<Message> selectByGroupId(String groupId) {
+        return messageMapper.selectByGroupId(groupId);
+    }
 }

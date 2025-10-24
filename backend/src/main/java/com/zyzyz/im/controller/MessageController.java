@@ -65,4 +65,10 @@ public class MessageController {
         List<String> contacts = messageService.selectRecentContactsByUserId(userId);
         return Result.success(contacts);
     }
+    
+    @GetMapping("/group/history")
+    public Result<List<Message>> getGroupMessages(@RequestParam String groupId) {
+        List<Message> messages = messageService.selectByGroupId(groupId);
+        return Result.success(messages);
+    }
 }

@@ -3,15 +3,27 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.zyzyz.im.mapper.MessageMapper">
+    
+    <!-- 插入消息 -->
     <insert id="insert" parameterType="com.zyzyz.im.entity.Message">
-        INSERT INTO t_message (from_user_id, to_user_id, content, message_id, message_type, status, created_at) VALUES (#{fromUserId}, #{toUserId}, #{content}, #{messageId}, #{messageType}, #{status}, #{createdAt})
+        INSERT INTO t_message (from_user_id, to_user_id, content, message_id, message_type, status, group_id, created_at) 
+        VALUES (#{fromUserId}, #{toUserId}, #{content}, #{messageId}, #{messageType}, #{status}, #{groupId}, #{createdAt})
     </insert>
+    
+    <!-- 根据消息ID查询 -->
     <select id="selectByMessageId" parameterType="string" resultType="com.zyzyz.im.entity.Message">
         SELECT * FROM t_message WHERE message_id = #{messageId}
     </select>
+    
+    <!-- 查询两个用户之间的聊天记录 -->
     <select id="selectByUsers" resultType="com.zyzyz.im.entity.Message">
-        SELECT * FROM t_message WHERE (from_user_id = #{fromUserId} AND to_user_id = #{toUserId}) OR (from_user_id = #{toUserId} AND to_user_id = #{fromUserId}) ORDER BY created_at ASC
+        SELECT * FROM t_message 
+        WHERE (from_user_id = #{fromUserId} AND to_user_id = #{toUserId}) 
+           OR (from_user_id = #{toUserId} AND to_user_id = #{fromUserId}) 
+        ORDER BY created_at ASC
     </select>
+    
+    <!-- 查询未读消息 -->
     <select id="selectUnreadByUserId" parameterType="string" resultType="com.zyzyz.im.entity.Message">
         SELECT * FROM t_message WHERE to_user_id = #{userId} AND status = 0 ORDER BY created_at ASC
     </select>
@@ -27,17 +39,30 @@
         FROM (
             SELECT to_user_id as contact_user_id, MAX(created_at) as last_time
             FROM t_message
-            WHERE from_user_id = #{userId}
+            WHERE from_user_id = #{userId} AND group_id IS NULL
             GROUP BY to_user_id
             
             UNION ALL
             
             SELECT from_user_id as contact_user_id, MAX(created_at) as last_time
             FROM t_message
-            WHERE to_user_id = #{userId}
+            WHERE to_user_id = #{userId} AND group_id IS NULL
             GROUP BY from_user_id
         ) AS contacts
         GROUP BY contact_user_id
         ORDER BY MAX(last_time) DESC
+    </select>
+    
+    <!-- 查询群聊历史消息 -->
+    <select id="selectByGroupId" resultType="com.zyzyz.im.entity.Message">
+        SELECT * FROM t_message 
+        WHERE group_id = #{groupId} 
+        ORDER BY created_at ASC
+    </select>
+    
+    <!-- 查询所有消息 -->
+    <select id="selectAll" resultType="com.zyzyz.im.entity.Message">
+        SELECT * FROM t_message 
+        ORDER BY created_at ASC
     </select>
 </mapper>

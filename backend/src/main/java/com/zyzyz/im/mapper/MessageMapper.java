@@ -20,4 +20,14 @@ public interface MessageMapper {
      * 查询用户的最近联系人列表（和该用户聊过天的所有人）
      */
     List<String> selectRecentContactsByUserId(String userId);
+    
+    /**
+     * 查询群聊历史消息
+     */
+    List<Message> selectByGroupId(@Param("groupId") String groupId);
+    
+    /**
+     * 查询所有消息（用于同步到 ES）
+     */
+    List<Message> selectAll();
 }

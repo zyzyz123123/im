@@ -15,7 +15,11 @@ import org.springframework.stereotype.Component;
 import com.zyzyz.im.manager.WebsocketSessionManager;
 import com.zyzyz.im.dto.ChatMessage;
 import com.zyzyz.im.service.MessageService;
+import com.zyzyz.im.service.GroupService;
+import com.zyzyz.im.service.MessageSearchService;
 import com.zyzyz.im.entity.Message;
+
+import java.util.List;
 
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
@@ -28,6 +32,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private MessageService messageService;
+    
+    @Autowired
+    private GroupService groupService;
+    
+    @Autowired
+    private MessageSearchService messageSearchService;
     
     @Override
     public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
@@ -74,30 +84,110 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String payload = message.getPayload();
         ChatMessage chatMessage = objectMapper.readValue(payload, ChatMessage.class);
         
-        // 只处理聊天消息，系统消息不需要处理
-        if (!"chat".equals(chatMessage.getType())) {
-            return;
+        // 处理私聊消息
+        if ("chat".equals(chatMessage.getType())) {
+            handlePrivateChat(chatMessage, payload);
         }
-        
+        // 处理群聊消息
+        else if ("group_chat".equals(chatMessage.getType())) {
+            handleGroupChat(chatMessage, payload);
+        }
+    }
+    
+    /**
+     * 处理私聊消息
+     */
+    private void handlePrivateChat(ChatMessage chatMessage, String payload) throws Exception {
         String toUserId = chatMessage.getToUserId();
-
         WebSocketSession targetUserSession = websocketSessionManager.getSession(toUserId);
 
-        messageService.insert(Message.builder()
-        .fromUserId(chatMessage.getFromUserId())
-        .toUserId(chatMessage.getToUserId())
-        .content(chatMessage.getMessage())
-        .messageId(UUID.randomUUID().toString())
-        .messageType(1)
-        .status(0)
-        .createdAt(LocalDateTime.now())
-        .build());
+        // 保存消息到数据库
+        Message message = Message.builder()
+                .fromUserId(chatMessage.getFromUserId())
+                .toUserId(chatMessage.getToUserId())
+                .content(chatMessage.getMessage())
+                .messageId(UUID.randomUUID().toString())
+                .messageType(1)  // 1-私聊
+                .status(0)
+                .groupId(null)
+                .createdAt(LocalDateTime.now())
+                .build();
+        
+        messageService.insert(message);
+        
+        // 索引到 ElasticSearch（异步，失败不影响主流程）
+        try {
+            messageSearchService.indexMessage(message);
+            System.out.println("✅ 消息已索引到 ES: " + message.getMessageId());
+        } catch (Exception e) {
+            System.err.println("❌ 索引消息到 ES 失败: " + e.getMessage());
+            e.printStackTrace();
+        }
 
+        // 发送给目标用户
         if (targetUserSession != null && targetUserSession.isOpen()) {
             targetUserSession.sendMessage(new TextMessage(payload));
         } else {
             System.out.println("targetUserSession is null or closed");
         }
+    }
+    
+    /**
+     * 处理群聊消息
+     */
+    private void handleGroupChat(ChatMessage chatMessage, String payload) throws Exception {
+        String groupId = chatMessage.getGroupId();
+        String fromUserId = chatMessage.getFromUserId();
+        
+        // 检查用户是否在群组中
+        if (!groupService.isUserInGroup(groupId, fromUserId)) {
+            System.out.println("用户不在群组中: " + fromUserId);
+            return;
+        }
+        
+        // 保存消息到数据库
+        Message message = Message.builder()
+                .fromUserId(chatMessage.getFromUserId())
+                .toUserId(null)  // 群聊时 toUserId 为空
+                .content(chatMessage.getMessage())
+                .messageId(UUID.randomUUID().toString())
+                .messageType(2)  // 2-群聊
+                .status(0)
+                .groupId(groupId)
+                .createdAt(LocalDateTime.now())
+                .build();
+        
+        messageService.insert(message);
+        
+        // 索引到 ElasticSearch
+        try {
+            messageSearchService.indexMessage(message);
+            System.out.println("✅ 群消息已索引到 ES: " + message.getMessageId());
+        } catch (Exception e) {
+            System.err.println("❌ 索引群消息到 ES 失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        // 获取群组所有成员
+        List<String> memberIds = groupService.getGroupMemberIds(groupId);
+        System.out.println("群组成员列表: " + memberIds);
+        
+        // 广播给群组所有在线成员（除了发送者自己）
+        int sentCount = 0;
+        for (String memberId : memberIds) {
+            if (!memberId.equals(fromUserId)) {  // 不发给自己
+                WebSocketSession memberSession = websocketSessionManager.getSession(memberId);
+                if (memberSession != null && memberSession.isOpen()) {
+                    memberSession.sendMessage(new TextMessage(payload));
+                    sentCount++;
+                    System.out.println("已发送群消息给: " + memberId);
+                } else {
+                    System.out.println("成员不在线或Session已关闭: " + memberId);
+                }
+            }
+        }
+        
+        System.out.println("群消息已广播: " + groupId + ", 总成员数: " + memberIds.size() + ", 实际发送: " + sentCount);
     }
 
     @Override

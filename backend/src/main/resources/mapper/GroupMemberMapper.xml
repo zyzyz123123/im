@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.zyzyz.im.mapper.GroupMemberMapper">
+    
+    <resultMap id="BaseResultMap" type="com.zyzyz.im.entity.GroupMember">
+        <id column="id" property="id"/>
+        <result column="group_id" property="groupId"/>
+        <result column="user_id" property="userId"/>
+        <result column="role" property="role"/>
+        <result column="nickname" property="nickname"/>
+        <result column="joined_at" property="joinedAt"/>
+    </resultMap>
+    
+    <!-- 插入群成员 -->
+    <insert id="insert" parameterType="com.zyzyz.im.entity.GroupMember">
+        INSERT INTO t_group_member (group_id, user_id, role, nickname, joined_at)
+        VALUES (#{groupId}, #{userId}, #{role}, #{nickname}, #{joinedAt})
+    </insert>
+    
+    <!-- 批量插入群成员 -->
+    <insert id="batchInsert">
+        INSERT INTO t_group_member (group_id, user_id, role, nickname, joined_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.groupId}, #{item.userId}, #{item.role}, #{item.nickname}, #{item.joinedAt})
+        </foreach>
+    </insert>
+    
+    <!-- 查询群组的所有成员ID -->
+    <select id="selectMemberIdsByGroupId" resultType="java.lang.String">
+        SELECT user_id FROM t_group_member WHERE group_id = #{groupId}
+    </select>
+    
+    <!-- 查询群组的所有成员 -->
+    <select id="selectMembersByGroupId" resultMap="BaseResultMap">
+        SELECT * FROM t_group_member WHERE group_id = #{groupId}
+    </select>
+    
+    <!-- 查询用户是否在群组中 -->
+    <select id="selectByGroupIdAndUserId" resultMap="BaseResultMap">
+        SELECT * FROM t_group_member 
+        WHERE group_id = #{groupId} AND user_id = #{userId}
+    </select>
+    
+    <!-- 统计群成员数量 -->
+    <select id="countByGroupId" resultType="int">
+        SELECT COUNT(*) FROM t_group_member WHERE group_id = #{groupId}
+    </select>
+    
+</mapper>
+
