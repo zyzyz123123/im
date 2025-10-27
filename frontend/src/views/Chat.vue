@@ -251,8 +251,8 @@
               </div>
             </div>
             
-            <!-- AI正在思考 -->
-            <div v-if="isAIThinking" class="message-item received">
+            <!-- AI正在思考（仅在AI聊天窗口显示）-->
+            <div v-if="isAIThinking && chatType === 'user' && currentChatUser === AI_ASSISTANT_ID" class="message-item received">
               <div class="message-bubble">
                 <div class="message-content ai-thinking">
                   <span class="thinking-dot">●</span>
@@ -264,7 +264,7 @@
             </div>
             
             <el-empty 
-              v-if="currentMessages.length === 0 && !isAIThinking" 
+              v-if="currentMessages.length === 0 && !(isAIThinking && chatType === 'user' && currentChatUser === AI_ASSISTANT_ID)" 
               description="暂无消息"
               :image-size="100"
             />

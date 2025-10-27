@@ -39,14 +39,14 @@
         FROM (
             SELECT to_user_id as contact_user_id, MAX(created_at) as last_time
             FROM t_message
-            WHERE from_user_id = #{userId} AND group_id IS NULL
+            WHERE from_user_id = #{userId} AND group_id IS NULL AND to_user_id != 'ai_assistant'
             GROUP BY to_user_id
             
             UNION ALL
             
             SELECT from_user_id as contact_user_id, MAX(created_at) as last_time
             FROM t_message
-            WHERE to_user_id = #{userId} AND group_id IS NULL
+            WHERE to_user_id = #{userId} AND group_id IS NULL AND from_user_id != 'ai_assistant'
             GROUP BY from_user_id
         ) AS contacts
         GROUP BY contact_user_id
