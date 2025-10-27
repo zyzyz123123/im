@@ -23,7 +23,7 @@ public class Message {
     
     private String messageId;
 
-    private Integer messageType;  // 1-私聊, 2-群聊
+    private Integer messageType;  // 1-私聊, 2-群聊, 3-AI对话
 
     private Integer status;
     

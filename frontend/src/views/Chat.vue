@@ -42,6 +42,20 @@
         
         <!-- 最近聊天列表（私聊 + 群聊）-->
         <div v-show="activeTab === 'recent'" class="online-users">
+          <!-- AI智能助手（固定在最上方）-->
+          <div 
+            :class="['user-item', 'ai-assistant-item', { active: chatType === 'user' && currentChatUser === AI_ASSISTANT_ID }]"
+            @click="selectAI"
+          >
+            <div class="user-avatar">
+              <div class="avatar-circle ai-avatar">🤖</div>
+            </div>
+            <div class="user-info">
+              <span class="user-name">AI智能助手</span>
+              <span class="ai-tag">智能问答</span>
+            </div>
+          </div>
+          
           <!-- 最近群聊 -->
           <div 
             v-for="group in recentGroups" 
@@ -199,13 +213,24 @@
           <!-- 聊天头部 -->
           <div class="chat-header">
             <h3>{{ currentChatTitle }}</h3>
-            <el-button 
-              size="small" 
-              type="info"
-              @click="closeChat"
-            >
-              关闭
-            </el-button>
+            <div class="chat-header-actions">
+              <!-- AI对话特有的清空按钮 -->
+              <el-button 
+                v-if="chatType === 'user' && currentChatUser === AI_ASSISTANT_ID"
+                size="small" 
+                type="warning"
+                @click="clearAIHistory"
+              >
+                清空对话
+              </el-button>
+              <el-button 
+                size="small" 
+                type="info"
+                @click="closeChat"
+              >
+                关闭
+              </el-button>
+            </div>
           </div>
           
           <!-- 消息列表 -->
@@ -226,8 +251,20 @@
               </div>
             </div>
             
+            <!-- AI正在思考 -->
+            <div v-if="isAIThinking" class="message-item received">
+              <div class="message-bubble">
+                <div class="message-content ai-thinking">
+                  <span class="thinking-dot">●</span>
+                  <span class="thinking-dot">●</span>
+                  <span class="thinking-dot">●</span>
+                  <span style="margin-left: 8px;">AI正在思考中...</span>
+                </div>
+              </div>
+            </div>
+            
             <el-empty 
-              v-if="currentMessages.length === 0" 
+              v-if="currentMessages.length === 0 && !isAIThinking" 
               description="暂无消息"
               :image-size="100"
             />
@@ -303,6 +340,7 @@
   import { searchApi } from '../api/search'
   import { wsClient } from '../api/websocket'
   import { logout as logoutApi } from '../api/auth'
+  import { aiApi } from '../api/ai'
   import { ElMessage } from 'element-plus'
   import { Search } from '@element-plus/icons-vue'
   
@@ -337,6 +375,10 @@
   const searchResults = ref([])
   const showSearchResults = ref(false)
   
+  // AI助手相关
+  const AI_ASSISTANT_ID = 'AI_ASSISTANT'
+  const isAIThinking = ref(false)
+  
   // 当前聊天消息
   const currentMessages = computed(() => {
     const chatId = chatType.value === 'user' ? currentChatUser.value : currentChatGroup.value
@@ -347,6 +389,9 @@
   // 当前聊天标题
   const currentChatTitle = computed(() => {
     if (chatType.value === 'user') {
+      if (currentChatUser.value === AI_ASSISTANT_ID) {
+        return 'AI智能助手 🤖'
+      }
       return currentChatUser.value ? `与 ${currentChatUser.value} 聊天` : ''
     } else {
       const group = groupList.value.find(g => g.groupId === currentChatGroup.value)
@@ -439,6 +484,37 @@
     }
   }
   
+  // 选择AI助手
+  const selectAI = async () => {
+    // 关闭搜索结果（如果打开的话）
+    showSearchResults.value = false
+    
+    chatType.value = 'user'
+    currentChatUser.value = AI_ASSISTANT_ID
+    currentChatGroup.value = ''
+    
+    // 初始化AI消息数组
+    if (!messages[AI_ASSISTANT_ID]) {
+      messages[AI_ASSISTANT_ID] = []
+    }
+    
+    // 清除未读数量
+    unreadCount[AI_ASSISTANT_ID] = 0
+    
+    // 加载AI聊天历史（从数据库）
+    try {
+      const response = await aiApi.getHistory(userStore.userId)
+      messages[AI_ASSISTANT_ID] = response.data || []
+      console.log('加载AI聊天历史:', messages[AI_ASSISTANT_ID].length, '条')
+    } catch (error) {
+      console.error('加载AI聊天历史失败:', error)
+    }
+    
+    // 滚动到底部
+    await nextTick()
+    scrollToBottom()
+  }
+  
   // 选择用户（私聊）
   const selectUser = async (userId) => {
     // 关闭搜索结果（如果打开的话）
@@ -505,13 +581,20 @@
   }
   
   // 发送消息
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!inputMessage.value.trim()) return
     
-    let success = false
     const chatId = chatType.value === 'user' ? currentChatUser.value : currentChatGroup.value
     
     if (!chatId) return
+    
+    // 如果是AI助手
+    if (chatType.value === 'user' && currentChatUser.value === AI_ASSISTANT_ID) {
+      await sendMessageToAI()
+      return
+    }
+    
+    let success = false
     
     // 发送私聊消息
     if (chatType.value === 'user') {
@@ -851,6 +934,78 @@
     chatType.value = 'user'
   }
   
+  // 发送消息给AI
+  const sendMessageToAI = async () => {
+    const userMessage = inputMessage.value.trim()
+    if (!userMessage) return
+    
+    // 添加用户消息到列表
+    const userMsg = {
+      fromUserId: userStore.userId,
+      toUserId: AI_ASSISTANT_ID,
+      content: userMessage,
+      createdAt: new Date().toISOString()
+    }
+    
+    if (!messages[AI_ASSISTANT_ID]) {
+      messages[AI_ASSISTANT_ID] = []
+    }
+    messages[AI_ASSISTANT_ID].push(userMsg)
+    
+    // 清空输入框
+    inputMessage.value = ''
+    
+    // 显示AI正在思考
+    isAIThinking.value = true
+    
+    // 滚动到底部
+    await nextTick()
+    scrollToBottom()
+    
+    try {
+      // 调用AI API
+      const response = await aiApi.chat(userStore.userId, userMessage, false)
+      
+      // 添加AI回复到消息列表
+      const aiMsg = {
+        fromUserId: AI_ASSISTANT_ID,
+        toUserId: userStore.userId,
+        content: response.data.reply,
+        createdAt: new Date().toISOString(),
+        tokensUsed: response.data.tokensUsed
+      }
+      
+      messages[AI_ASSISTANT_ID].push(aiMsg)
+      
+      // 滚动到底部
+      await nextTick()
+      scrollToBottom()
+      
+    } catch (error) {
+      console.error('AI聊天失败:', error)
+      ElMessage.error('AI暂时无法回复，请稍后重试')
+    } finally {
+      isAIThinking.value = false
+    }
+  }
+  
+  // 清空AI对话历史
+  const clearAIHistory = async () => {
+    try {
+      // 调用后端API清空Redis中的对话历史
+      await aiApi.clearHistory(userStore.userId)
+      
+      // 清空前端显示的消息列表
+      messages[AI_ASSISTANT_ID] = []
+      
+      ElMessage.success('对话历史已清空')
+      console.log('AI对话历史已清空')
+    } catch (error) {
+      console.error('清空对话历史失败:', error)
+      ElMessage.error('清空失败，请稍后重试')
+    }
+  }
+  
   // 退出登录
   const handleLogout = async () => {
     try {
@@ -1066,6 +1221,11 @@
     margin: 0;
   }
   
+  .chat-header-actions {
+    display: flex;
+    gap: 10px;
+  }
+  
   .message-list {
     flex: 1;
     overflow-y: auto;
@@ -1239,5 +1399,70 @@
     font-weight: 600;
     padding: 2px 4px;
     border-radius: 3px;
+  }
+  
+  /* AI助手样式 */
+  .ai-assistant-item {
+    border: 2px solid #f0f0f0;
+    margin-bottom: 10px !important;
+  }
+  
+  .ai-assistant-item:hover {
+    border-color: #67c23a;
+  }
+  
+  .ai-assistant-item.active {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border-color: #67c23a;
+  }
+  
+  .ai-avatar {
+    background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%) !important;
+    font-size: 22px;
+  }
+  
+  .ai-tag {
+    font-size: 11px;
+    color: #67c23a;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: #f0f9ff;
+    border-radius: 10px;
+  }
+  
+  /* AI思考动画 */
+  .ai-thinking {
+    display: flex;
+    align-items: center;
+  }
+  
+  .thinking-dot {
+    display: inline-block;
+    animation: thinking 1.4s infinite;
+    margin: 0 2px;
+    color: #67c23a;
+  }
+  
+  .thinking-dot:nth-child(1) {
+    animation-delay: 0s;
+  }
+  
+  .thinking-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  
+  .thinking-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+  
+  @keyframes thinking {
+    0%, 60%, 100% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    30% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
   }
   </style>
