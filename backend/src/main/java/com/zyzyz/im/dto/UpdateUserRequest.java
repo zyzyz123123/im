@@ -9,9 +9,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class LoginResponse {
+public class UpdateUserRequest {
     private String userId;
     private String nickname;
     private String avatar;
     private String email;
 }
+

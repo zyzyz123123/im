@@ -30,4 +30,9 @@ public interface MessageMapper {
      * 查询所有消息（用于同步到 ES）
      */
     List<Message> selectAll();
+    
+    /**
+     * 删除用户的AI对话记录（messageType = 3）
+     */
+    void deleteAIMessages(@Param("userId") String userId);
 }

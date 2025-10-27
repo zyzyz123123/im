@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.zyzyz.im.dto.LoginResponse;
+import com.zyzyz.im.dto.UpdateUserRequest;
+import com.zyzyz.im.entity.User;
 import com.zyzyz.im.service.UserService;
 import com.zyzyz.im.dto.RegisterRequest;
 import com.zyzyz.im.dto.LoginRequest;
@@ -53,5 +55,22 @@ public class AuthController {
         }
         session.invalidate(); // 清除 Session
         return Result.success("登出成功");
+    }
+    
+    @PostMapping("/updateProfile")
+    public Result<User> updateProfile(@RequestBody UpdateUserRequest updateUserRequest, HttpSession session) {
+        try {
+            // 更新用户信息
+            userService.updateUser(updateUserRequest);
+            
+            // 更新Session中的信息
+            session.setAttribute("nickname", updateUserRequest.getNickname());
+            
+            // 返回更新后的用户信息
+            User updatedUser = userService.getUserByUserId(updateUserRequest.getUserId());
+            return Result.success("更新成功", updatedUser);
+        } catch (Exception e) {
+            return Result.error("更新失败：" + e.getMessage());
+        }
     }
 }

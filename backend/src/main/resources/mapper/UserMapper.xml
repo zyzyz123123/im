@@ -9,4 +9,15 @@
     <select id="selectByUserId" parameterType="string" resultType="com.zyzyz.im.entity.User">
         SELECT * FROM t_user WHERE user_id = #{userId}
     </select>
+    
+    <update id="updateUser" parameterType="com.zyzyz.im.entity.User">
+        UPDATE t_user 
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="email != null">email = #{email},</if>
+            updated_at = #{updatedAt}
+        </set>
+        WHERE user_id = #{userId}
+    </update>
 </mapper>

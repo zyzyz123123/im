@@ -50,12 +50,37 @@ public class AIController {
     }
     
     /**
-     * 清空对话历史
+     * 清空对话上下文（开始新话题，保留历史）
      */
     @PostMapping("/clear")
     public Result<Void> clearHistory(@RequestParam String userId) {
-        log.info("清空对话历史，用户：{}", userId);
+        log.info("清空对话上下文（开始新话题），用户：{}", userId);
+        
+        // 只清空Redis中的上下文，数据库记录保留
         aiService.clearHistory(userId);
+        
+        return Result.success();
+    }
+    
+    /**
+     * 删除所有对话记录（彻底删除）
+     */
+    @PostMapping("/delete")
+    public Result<Void> deleteHistory(@RequestParam String userId) {
+        log.info("删除所有AI对话记录，用户：{}", userId);
+        
+        // 清空Redis中的上下文
+        aiService.clearHistory(userId);
+        
+        // 删除数据库中的历史记录
+        try {
+            messageService.deleteAIMessages(userId);
+            log.info("已删除数据库中的AI对话记录，用户：{}", userId);
+        } catch (Exception e) {
+            log.error("删除数据库AI对话记录失败，用户：{}，错误：{}", userId, e.getMessage());
+            return Result.error("删除失败");
+        }
+        
         return Result.success();
     }
     

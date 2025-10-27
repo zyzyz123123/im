@@ -21,4 +21,9 @@ public interface MessageService {
      * 查询群聊历史消息
      */
     List<Message> selectByGroupId(String groupId);
+    
+    /**
+     * 删除用户的AI对话记录
+     */
+    void deleteAIMessages(String userId);
 }   

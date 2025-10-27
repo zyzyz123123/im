@@ -30,7 +30,21 @@
         </div>
         
         <div class="current-user">
-          <el-tag type="success">{{ userStore.nickname }}</el-tag>
+          <div class="current-user-info">
+            <img v-if="userStore.avatar" :src="userStore.avatar" class="current-user-avatar" alt="头像" />
+            <div v-else class="current-user-avatar-placeholder">{{ userStore.nickname.charAt(0).toUpperCase() }}</div>
+            <div class="current-user-name">
+              <el-tag type="success">{{ userStore.nickname }}</el-tag>
+            </div>
+            <el-button 
+              type="primary" 
+              size="small" 
+              @click="showProfileDialog = true"
+              class="edit-profile-btn"
+            >
+              编辑资料
+            </el-button>
+          </div>
         </div>
         
         <!-- 标签页切换 -->
@@ -86,7 +100,7 @@
             @click="selectUser(user)"
           >
             <div class="user-avatar">
-              <div class="avatar-circle">{{ user.charAt(0).toUpperCase() }}</div>
+              <img :src="getUserAvatar(user)" class="avatar-image" alt="头像" />
               <span :class="['status-dot', { online: onlineUsers.includes(user), offline: !onlineUsers.includes(user) }]"></span>
             </div>
             <div class="user-info">
@@ -116,7 +130,7 @@
             @click="selectUser(user)"
           >
             <div class="user-avatar">
-              <div class="avatar-circle">{{ user.charAt(0).toUpperCase() }}</div>
+              <img :src="getUserAvatar(user)" class="avatar-image" alt="头像" />
               <span class="status-dot online"></span>
             </div>
             <div class="user-info">
@@ -214,15 +228,24 @@
           <div class="chat-header">
             <h3>{{ currentChatTitle }}</h3>
             <div class="chat-header-actions">
-              <!-- AI对话特有的清空按钮 -->
-              <el-button 
-                v-if="chatType === 'user' && currentChatUser === AI_ASSISTANT_ID"
-                size="small" 
-                type="warning"
-                @click="clearAIHistory"
-              >
-                清空对话
-              </el-button>
+              <!-- AI对话特有的按钮 -->
+              <template v-if="chatType === 'user' && currentChatUser === AI_ASSISTANT_ID">
+                <el-dropdown @command="handleAIAction">
+                  <el-button size="small" type="primary">
+                    对话管理<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="newTopic">
+                        🔄 开始新话题（保留历史）
+                      </el-dropdown-item>
+                      <el-dropdown-item command="clearAll" divided>
+                        🗑️ 删除所有记录
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </template>
               <el-button 
                 size="small" 
                 type="info"
@@ -238,21 +261,58 @@
             <div 
               v-for="msg in currentMessages" 
               :key="msg.id || msg.createdAt"
-              :class="['message-item', msg.fromUserId === userStore.userId ? 'sent' : 'received']"
             >
-              <div class="message-bubble">
-                <div class="message-sender" v-if="chatType === 'group' && msg.fromUserId !== userStore.userId">
-                  {{ msg.fromUserId }}
+              <!-- 对话分隔符 -->
+              <div v-if="msg.type === 'divider'" class="chat-divider">
+                <div class="divider-line"></div>
+                <div class="divider-text">
+                  <span class="divider-icon">🆕</span>
+                  {{ msg.content }}
+                  <span class="divider-icon">🆕</span>
                 </div>
-                <div class="message-content">
-                  {{ msg.content || msg.message }}
+                <div class="divider-line"></div>
+              </div>
+              
+              <!-- 普通消息 -->
+              <div 
+                v-else
+                :class="['message-item', msg.fromUserId === userStore.userId ? 'sent' : 'received']"
+              >
+                <!-- 接收消息：头像在左侧 -->
+                <img 
+                  v-if="msg.fromUserId !== userStore.userId"
+                  :src="getMessageAvatar(msg.fromUserId)"
+                  class="message-avatar"
+                  :alt="msg.fromUserId"
+                />
+                
+                <div class="message-bubble">
+                  <div class="message-sender" v-if="chatType === 'group' && msg.fromUserId !== userStore.userId">
+                    {{ msg.fromUserId }}
+                  </div>
+                  <div class="message-content">
+                    {{ msg.content || msg.message }}
+                  </div>
+                  <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
                 </div>
-                <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
+                
+                <!-- 发送消息：头像在右侧 -->
+                <img 
+                  v-if="msg.fromUserId === userStore.userId"
+                  :src="userStore.avatar || getUserAvatar(userStore.userId)"
+                  class="message-avatar"
+                  :alt="userStore.nickname"
+                />
               </div>
             </div>
             
             <!-- AI正在思考（仅在AI聊天窗口显示）-->
             <div v-if="isAIThinking && chatType === 'user' && currentChatUser === AI_ASSISTANT_ID" class="message-item received">
+              <img 
+                :src="getMessageAvatar(AI_ASSISTANT_ID)"
+                class="message-avatar"
+                alt="AI助手"
+              />
               <div class="message-bubble">
                 <div class="message-content ai-thinking">
                   <span class="thinking-dot">●</span>
@@ -329,6 +389,62 @@
         <el-button type="primary" @click="handleCreateGroup">创建</el-button>
       </template>
     </el-dialog>
+    
+    <!-- 编辑个人资料对话框 -->
+    <el-dialog 
+      v-model="showProfileDialog" 
+      title="编辑个人资料" 
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="profileForm" label-width="100px">
+        <el-form-item label="用户ID">
+          <el-input v-model="profileForm.userId" disabled />
+        </el-form-item>
+        <el-form-item label="昵称">
+          <el-input v-model="profileForm.nickname" placeholder="请输入昵称" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
+        </el-form-item>
+        <el-form-item label="选择头像颜色">
+          <div class="avatar-preview-section">
+            <!-- 预览当前头像 -->
+            <div class="profile-avatar-preview">
+              <img 
+                v-if="profileForm.nickname && selectedProfileColor" 
+                :src="generateAvatarUrl(profileForm.nickname, selectedProfileColor)" 
+                alt="头像预览" 
+              />
+              <div v-else class="avatar-placeholder">
+                预览
+              </div>
+            </div>
+            
+            <!-- 颜色选择器 -->
+            <div class="color-selector">
+              <div 
+                v-for="color in colorSchemes" 
+                :key="color.bg"
+                :class="['color-option', { selected: selectedProfileColor.bg === color.bg }]"
+                :style="{ backgroundColor: '#' + color.bg }"
+                @click="selectProfileColor(color)"
+                :title="color.name"
+              >
+                <span v-if="selectedProfileColor.bg === color.bg" class="check-icon">✓</span>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="自定义头像URL">
+          <el-input v-model="customAvatarUrl" placeholder="可选：输入自定义头像URL" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showProfileDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleUpdateProfile">保存</el-button>
+      </template>
+    </el-dialog>
   </template>
   
   <script setup>
@@ -339,10 +455,10 @@
   import { groupApi } from '../api/group'
   import { searchApi } from '../api/search'
   import { wsClient } from '../api/websocket'
-  import { logout as logoutApi } from '../api/auth'
+  import { logout as logoutApi, updateProfile as updateProfileApi } from '../api/auth'
   import { aiApi } from '../api/ai'
-  import { ElMessage } from 'element-plus'
-  import { Search } from '@element-plus/icons-vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { Search, ArrowDown } from '@element-plus/icons-vue'
   
   const router = useRouter()
   const userStore = useUserStore()
@@ -368,6 +484,29 @@
     description: '',
     memberIds: []
   })
+  
+  // 个人资料编辑
+  const showProfileDialog = ref(false)
+  const profileForm = reactive({
+    userId: userStore.userId,
+    nickname: userStore.nickname,
+    email: userStore.email || '',
+    avatar: userStore.avatar || ''
+  })
+  const customAvatarUrl = ref('')
+  
+  // 颜色方案（与注册页面相同）
+  const colorSchemes = [
+    { bg: '667eea', fg: 'fff', name: '紫色' },
+    { bg: 'f093fb', fg: 'fff', name: '粉色' },
+    { bg: '4facfe', fg: 'fff', name: '蓝色' },
+    { bg: '43e97b', fg: 'fff', name: '绿色' },
+    { bg: 'fa709a', fg: 'fff', name: '玫红' },
+    { bg: 'fee140', fg: '333', name: '黄色' },
+    { bg: '30cfd0', fg: 'fff', name: '青色' },
+    { bg: 'a8edea', fg: '333', name: '薄荷' }
+  ]
+  const selectedProfileColor = ref(colorSchemes[0])
   const selectedMembers = ref([])  // 选中的群成员
   
   // 搜索相关
@@ -856,6 +995,96 @@
   }
   
   // 创建群组
+  // 生成头像URL（与注册页面相同）
+  const generateAvatarUrl = (nickname, colorScheme) => {
+    const name = nickname || '?'
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${colorScheme.bg}&color=${colorScheme.fg}&size=128`
+  }
+  
+  // 选择颜色
+  const selectProfileColor = (colorScheme) => {
+    selectedProfileColor.value = colorScheme
+    if (profileForm.nickname) {
+      profileForm.avatar = generateAvatarUrl(profileForm.nickname, colorScheme)
+    }
+  }
+  
+  // 打开个人资料对话框时初始化
+  watch(showProfileDialog, (newVal) => {
+    if (newVal) {
+      // 填充当前用户信息
+      profileForm.userId = userStore.userId
+      profileForm.nickname = userStore.nickname
+      profileForm.email = userStore.email || ''
+      profileForm.avatar = userStore.avatar || ''
+      
+      // 检测当前头像是否是通过UI Avatars生成的
+      if (userStore.avatar && userStore.avatar.includes('ui-avatars.com')) {
+        // 如果是UI Avatars生成的，提取颜色方案
+        try {
+          const urlParams = new URLSearchParams(userStore.avatar.split('?')[1])
+          const avatarBg = urlParams.get('background')
+          const matchedColor = colorSchemes.find(c => c.bg === avatarBg)
+          
+          if (matchedColor) {
+            selectedProfileColor.value = matchedColor
+            customAvatarUrl.value = '' // 清空自定义URL
+          } else {
+            // 找不到匹配的颜色，默认第一个
+            selectedProfileColor.value = colorSchemes[0]
+            customAvatarUrl.value = userStore.avatar // 放到自定义URL中
+          }
+        } catch (e) {
+          selectedProfileColor.value = colorSchemes[0]
+          customAvatarUrl.value = userStore.avatar
+        }
+      } else if (userStore.avatar) {
+        // 如果是自定义头像URL，填到自定义输入框
+        customAvatarUrl.value = userStore.avatar
+        selectedProfileColor.value = colorSchemes[0]
+      } else {
+        // 没有头像，默认第一个颜色
+        customAvatarUrl.value = ''
+        selectedProfileColor.value = colorSchemes[0]
+      }
+    }
+  })
+  
+  // 更新个人资料
+  const handleUpdateProfile = async () => {
+    if (!profileForm.nickname.trim()) {
+      ElMessage.warning('昵称不能为空')
+      return
+    }
+    
+    try {
+      // 优先使用自定义头像URL，否则使用颜色方案生成的头像
+      const finalAvatar = customAvatarUrl.value.trim() 
+        ? customAvatarUrl.value.trim() 
+        : generateAvatarUrl(profileForm.nickname, selectedProfileColor.value)
+      
+      const response = await updateProfileApi({
+        userId: profileForm.userId,
+        nickname: profileForm.nickname,
+        avatar: finalAvatar,
+        email: profileForm.email
+      })
+      
+      // 更新本地store和localStorage
+      userStore.updateProfile({
+        nickname: profileForm.nickname,
+        avatar: finalAvatar,
+        email: profileForm.email
+      })
+      
+      ElMessage.success('更新成功')
+      showProfileDialog.value = false
+    } catch (error) {
+      console.error('更新失败:', error)
+      ElMessage.error('更新失败：' + (error.message || '未知错误'))
+    }
+  }
+  
   const handleCreateGroup = async () => {
     if (!createGroupForm.groupName.trim()) {
       ElMessage.warning('请输入群名称')
@@ -989,21 +1218,102 @@
     }
   }
   
-  // 清空AI对话历史
-  const clearAIHistory = async () => {
+  // 处理AI对话管理操作
+  const handleAIAction = async (command) => {
+    if (command === 'newTopic') {
+      // 开始新话题（只清空上下文，不删除历史）
+      await startNewTopic()
+    } else if (command === 'clearAll') {
+      // 删除所有记录（需要确认）
+      await deleteAllHistory()
+    }
+  }
+  
+  // 开始新话题（只清空上下文，保留历史）
+  const startNewTopic = async () => {
     try {
-      // 调用后端API清空Redis中的对话历史
+      // 只清空Redis中的上下文，不删除数据库
       await aiApi.clearHistory(userStore.userId)
       
-      // 清空前端显示的消息列表
+      // 在聊天界面添加分隔符
+      if (messages[AI_ASSISTANT_ID]) {
+        const now = new Date()
+        messages[AI_ASSISTANT_ID].push({
+          type: 'divider',
+          content: `新对话开始 · ${now.toLocaleString('zh-CN', { 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}`,
+          createdAt: now.toISOString(),
+          id: 'divider-' + Date.now()
+        })
+        
+        // 滚动到底部
+        await nextTick()
+        scrollToBottom()
+      }
+      
+      ElMessage.success({
+        message: '✅ 已开始新话题！AI不会记得之前的内容，但历史记录保留',
+        duration: 3000
+      })
+      console.log('已开始新话题')
+    } catch (error) {
+      console.error('开始新话题失败:', error)
+      ElMessage.error('操作失败，请稍后重试')
+    }
+  }
+  
+  // 删除所有历史记录（需要确认）
+  const deleteAllHistory = async () => {
+    try {
+      await ElMessageBox.confirm(
+        '确定要删除所有AI对话记录吗？此操作不可恢复！',
+        '警告',
+        {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+          center: true
+        }
+      )
+      
+      // 调用后端API删除所有记录
+      await aiApi.deleteHistory(userStore.userId)
+      
+      // 清空前端显示
       messages[AI_ASSISTANT_ID] = []
       
-      ElMessage.success('对话历史已清空')
-      console.log('AI对话历史已清空')
+      ElMessage.success('所有对话记录已删除')
+      console.log('AI对话记录已删除')
     } catch (error) {
-      console.error('清空对话历史失败:', error)
-      ElMessage.error('清空失败，请稍后重试')
+      if (error === 'cancel') {
+        console.log('用户取消删除')
+      } else {
+        console.error('删除对话记录失败:', error)
+        ElMessage.error('删除失败，请稍后重试')
+      }
     }
+  }
+  
+  // 获取用户头像（使用UI Avatars生成）
+  const getUserAvatar = (userId) => {
+    // 使用UI Avatars API根据用户ID生成头像
+    const colors = ['667eea', 'f093fb', '4facfe', '43e97b', 'fa709a', 'fee140', '30cfd0', 'a8edea']
+    const colorIndex = userId.charCodeAt(0) % colors.length
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(userId)}&background=${colors[colorIndex]}&color=fff&size=128`
+  }
+  
+  // 获取消息发送者的头像
+  const getMessageAvatar = (fromUserId) => {
+    // AI助手使用特殊的emoji头像
+    if (fromUserId === AI_ASSISTANT_ID) {
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgZmlsbD0iIzY2N2VlYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjcwIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7wn6SWPC90ZXh0Pjwvc3ZnPg=='
+    }
+    // 其他用户使用默认头像生成
+    return getUserAvatar(fromUserId)
   }
   
   // 退出登录
@@ -1066,9 +1376,119 @@
     border-bottom: 1px solid #e4e7ed;
   }
   
-  .current-user {
-    padding: 15px 20px;
-  }
+.current-user {
+  padding: 15px 20px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.current-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.current-user-avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #67c23a;
+}
+
+.current-user-avatar-placeholder {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  border: 2px solid #67c23a;
+}
+
+.current-user-name {
+  flex: 1;
+}
+
+.edit-profile-btn {
+  margin-left: auto;
+}
+
+/* 个人资料编辑对话框样式 */
+.profile-avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #e4e7ed;
+  flex-shrink: 0;
+}
+
+.profile-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-preview-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  color: #909399;
+  font-size: 12px;
+  text-align: center;
+  padding: 5px;
+}
+
+.color-selector {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.color-option {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.color-option:hover {
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.color-option.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #409eff;
+}
+
+.check-icon {
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
   
   .user-tabs {
     padding: 0 10px;
@@ -1114,18 +1534,25 @@
     flex-shrink: 0;
   }
   
-  .avatar-circle {
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: bold;
-  }
+.avatar-circle {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.avatar-image {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+}
   
   .status-dot {
     position: absolute;
@@ -1233,11 +1660,64 @@
     background: #f5f7fa;
   }
   
+  /* 对话分隔符样式 */
+  .chat-divider {
+    display: flex;
+    align-items: center;
+    margin: 30px 0;
+    width: 100%;
+  }
+  
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, transparent, #d0d0d0, transparent);
+  }
+  
+  .divider-text {
+    padding: 0 20px;
+    color: #909399;
+    font-size: 13px;
+    white-space: nowrap;
+    background: #f5f7fa;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .divider-icon {
+    font-size: 14px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(1.1);
+    }
+  }
+  
   .message-item {
     margin-bottom: 16px;
     max-width: 70%;
     display: flex;
+    align-items: flex-end;
+    gap: 10px;
     animation: messageSlideIn 0.3s ease-out;
+  }
+  
+  .message-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid #e4e7ed;
   }
   
   @keyframes messageSlideIn {

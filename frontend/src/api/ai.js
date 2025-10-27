@@ -61,11 +61,21 @@ export const aiApi = {
   },
   
   /**
-   * 清空对话历史
+   * 清空对话上下文（开始新话题，保留历史）
    * @param {string} userId - 用户ID
    */
   clearHistory(userId) {
     return request.post('/ai/clear', null, {
+      params: { userId }
+    })
+  },
+  
+  /**
+   * 删除所有对话记录（彻底删除）
+   * @param {string} userId - 用户ID
+   */
+  deleteHistory(userId) {
+    return request.post('/ai/delete', null, {
       params: { userId }
     })
   },

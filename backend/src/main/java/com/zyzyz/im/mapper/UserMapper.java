@@ -9,4 +9,5 @@ public interface UserMapper {
 
     User selectByUserId(String userId);
     void insert(User user);
+    void updateUser(User user);
 }

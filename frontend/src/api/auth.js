@@ -70,3 +70,15 @@ export function logout() {
   return authAPI.post('/auth/logout')
 }
 
+/**
+ * 更新用户信息
+ */
+export function updateProfile(data) {
+  return authAPI.post('/auth/updateProfile', {
+    userId: data.userId,
+    nickname: data.nickname,
+    avatar: data.avatar,
+    email: data.email
+  })
+}
+

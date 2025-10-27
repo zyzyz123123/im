@@ -65,4 +65,11 @@
         SELECT * FROM t_message 
         ORDER BY created_at ASC
     </select>
+    
+    <!-- 删除用户的AI对话记录 -->
+    <delete id="deleteAIMessages">
+        DELETE FROM t_message 
+        WHERE message_type = 3 
+        AND (from_user_id = #{userId} OR to_user_id = #{userId})
+    </delete>
 </mapper>

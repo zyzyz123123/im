@@ -53,4 +53,9 @@ public class MessageServiceImpl implements MessageService {
     public List<Message> selectByGroupId(String groupId) {
         return messageMapper.selectByGroupId(groupId);
     }
+    
+    @Override
+    public void deleteAIMessages(String userId) {
+        messageMapper.deleteAIMessages(userId);
+    }
 }

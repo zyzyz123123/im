@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import com.zyzyz.im.dto.RegisterRequest;
 import com.zyzyz.im.dto.LoginRequest;
 import com.zyzyz.im.dto.LoginResponse;
+import com.zyzyz.im.dto.UpdateUserRequest;
 import com.zyzyz.im.entity.User;
 import com.zyzyz.im.mapper.UserMapper;
 import com.zyzyz.im.service.UserService;
@@ -50,11 +51,24 @@ public class UserServiceImpl implements UserService {
         .userId(user.getUserId())
         .nickname(user.getNickname())
         .avatar(user.getAvatar())
+        .email(user.getEmail())
         .build();
     }
 
     @Override
     public User getUserByUserId(String userId) {
         return userMapper.selectByUserId(userId);
+    }
+    
+    @Override
+    public void updateUser(UpdateUserRequest updateUserRequest) {
+        User user = User.builder()
+                .userId(updateUserRequest.getUserId())
+                .nickname(updateUserRequest.getNickname())
+                .avatar(updateUserRequest.getAvatar())
+                .email(updateUserRequest.getEmail())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        userMapper.updateUser(user);
     }
 }
