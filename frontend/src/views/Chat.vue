@@ -1704,7 +1704,6 @@
   
   .message-item {
     margin-bottom: 16px;
-    max-width: 70%;
     display: flex;
     align-items: flex-end;
     gap: 10px;
@@ -1744,7 +1743,8 @@
   .message-bubble {
     display: inline-flex;
     flex-direction: column;
-    max-width: 100%;
+    max-width: calc(100vw - 450px);
+    min-width: 80px;
   }
   
   .message-sender {
@@ -1752,15 +1752,21 @@
     color: #999;
     margin-bottom: 4px;
     padding: 0 4px;
+    width: fit-content;
   }
   
   .message-content {
     padding: 12px 16px;
     border-radius: 18px;
     word-break: break-word;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
     line-height: 1.6;
     font-size: 15px;
     position: relative;
+    width: fit-content;
+    max-width: 100%;
   }
   
   .message-item.sent .message-content {
@@ -1782,14 +1788,17 @@
     color: #909399;
     margin-top: 4px;
     padding: 0 4px;
+    width: fit-content;
   }
   
   .message-item.sent .message-time {
     text-align: right;
+    align-self: flex-end;
   }
   
   .message-item.received .message-time {
     text-align: left;
+    align-self: flex-start;
   }
   
   .message-input {
