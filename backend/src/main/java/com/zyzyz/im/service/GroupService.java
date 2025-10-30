@@ -37,5 +37,20 @@ public interface GroupService {
      * 获取用户最近有消息的群组（按最后消息时间排序）
      */
     List<GroupResponse> getRecentGroupsWithMessages(String userId);
+    
+    /**
+     * 添加成员到群组
+     */
+    void addMemberToGroup(String groupId, String userId, String operatorId);
+    
+    /**
+     * 从群组中移除成员
+     */
+    void removeMemberFromGroup(String groupId, String userId, String operatorId);
+    
+    /**
+     * 检查用户是否是群主或管理员
+     */
+    boolean isGroupAdmin(String groupId, String userId);
 }
 

@@ -10,9 +10,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 public class RegisterRequest {
-    private String userId;
+    // userId 由系统自动生成，不需要用户提供
     private String password;
-    private String nickname;
+    private String nickname;  // 昵称，作为登录凭证，需要唯一
     private String avatar;
     private String email;
 }

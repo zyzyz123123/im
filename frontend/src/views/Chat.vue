@@ -95,19 +95,19 @@
           <!-- 最近私聊 -->
           <div 
             v-for="user in recentContacts" 
-            :key="'user-' + user"
-            :class="['user-item', { active: chatType === 'user' && currentChatUser === user }]"
-            @click="selectUser(user)"
+            :key="'user-' + user.userId"
+            :class="['user-item', { active: chatType === 'user' && currentChatUser === user.userId }]"
+            @click="selectUser(user.userId)"
           >
             <div class="user-avatar">
-              <img :src="getUserAvatar(user)" class="avatar-image" alt="头像" />
-              <span :class="['status-dot', { online: onlineUsers.includes(user), offline: !onlineUsers.includes(user) }]"></span>
+              <img :src="user.avatar || getUserAvatar(user.userId)" class="avatar-image" alt="头像" />
+              <span :class="['status-dot', { online: isUserOnline(user.userId), offline: !isUserOnline(user.userId) }]"></span>
             </div>
             <div class="user-info">
-              <span class="user-name">{{ user }}</span>
+              <span class="user-name">{{ user.nickname }}</span>
               <el-badge 
-                v-if="unreadCount[user] > 0" 
-                :value="unreadCount[user]" 
+                v-if="unreadCount[user.userId] > 0" 
+                :value="unreadCount[user.userId]" 
                 :max="99"
                 class="unread-badge"
               />
@@ -125,19 +125,19 @@
         <div v-show="activeTab === 'online'" class="online-users">
           <div 
             v-for="user in onlineUsers" 
-            :key="user"
-            :class="['user-item', { active: currentChatUser === user }]"
-            @click="selectUser(user)"
+            :key="user.userId"
+            :class="['user-item', { active: currentChatUser === user.userId }]"
+            @click="selectUser(user.userId)"
           >
             <div class="user-avatar">
-              <img :src="getUserAvatar(user)" class="avatar-image" alt="头像" />
+              <img :src="user.avatar || getUserAvatar(user.userId)" class="avatar-image" alt="头像" />
               <span class="status-dot online"></span>
             </div>
             <div class="user-info">
-              <span class="user-name">{{ user }}</span>
+              <span class="user-name">{{ user.nickname }}</span>
               <el-badge 
-                v-if="unreadCount[user] > 0" 
-                :value="unreadCount[user]" 
+                v-if="unreadCount[user.userId] > 0" 
+                :value="unreadCount[user.userId]" 
                 :max="99"
                 class="unread-badge"
               />
@@ -203,8 +203,8 @@
               class="search-item"
             >
               <div class="search-item-header">
-                <span class="from-user">{{ msg.fromUserId }}</span>
-                <span class="to-user" v-if="msg.messageType === 1">→ {{ msg.toUserId }}</span>
+                <span class="from-user">{{ getUserNickname(msg.fromUserId) }}</span>
+                <span class="to-user" v-if="msg.messageType === 1">→ {{ getUserNickname(msg.toUserId) }}</span>
                 <span class="group-name" v-else>[群聊]</span>
                 <span class="time">{{ formatTime(msg.createdAt) }}</span>
               </div>
@@ -245,6 +245,16 @@
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
+              </template>
+              <!-- 群聊特有的按钮 -->
+              <template v-if="chatType === 'group'">
+                <el-button 
+                  size="small" 
+                  type="primary"
+                  @click="openManageMembersDialog"
+                >
+                  管理成员
+                </el-button>
               </template>
               <el-button 
                 size="small" 
@@ -288,7 +298,7 @@
                 
                 <div class="message-bubble">
                   <div class="message-sender" v-if="chatType === 'group' && msg.fromUserId !== userStore.userId">
-                    {{ msg.fromUserId }}
+                    {{ getUserNickname(msg.fromUserId) }}
                   </div>
                   <div class="message-content">
                     {{ msg.content || msg.message }}
@@ -342,7 +352,7 @@
             <el-button 
               type="primary" 
               @click="sendMessage"
-              :disabled="!inputMessage.trim()"
+              :disabled="isSendDisabled"
             >
               发送 (Enter)
             </el-button>
@@ -373,10 +383,10 @@
           <el-checkbox-group v-model="selectedMembers">
             <el-checkbox 
               v-for="user in onlineUsers" 
-              :key="user" 
-              :label="user"
+              :key="user.userId" 
+              :label="user.userId"
             >
-              {{ user }}
+              {{ user.nickname }}
             </el-checkbox>
           </el-checkbox-group>
           <div v-if="onlineUsers.length === 0" style="color: #999;">
@@ -388,6 +398,70 @@
         <el-button @click="createGroupDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleCreateGroup">创建</el-button>
       </template>
+    </el-dialog>
+    
+    <!-- 管理群成员对话框 -->
+    <el-dialog 
+      v-model="manageMembersDialogVisible" 
+      title="管理群成员" 
+      width="600px"
+    >
+      <div class="manage-members-content">
+        <!-- 当前成员列表 -->
+        <div class="member-section">
+          <h4>当前成员 ({{ currentGroupMembers.length }}人)</h4>
+          <div class="member-list">
+            <div 
+              v-for="memberId in currentGroupMembers" 
+              :key="memberId"
+              class="member-item"
+            >
+              <div class="member-info">
+                <img :src="getUserAvatar(memberId)" class="member-avatar" alt="头像" />
+                <span class="member-name">{{ getUserNickname(memberId) }}</span>
+                <el-tag v-if="isGroupOwner(memberId)" type="danger" size="small">群主</el-tag>
+              </div>
+              <el-button 
+                v-if="!isGroupOwner(memberId)"
+                size="small" 
+                type="danger" 
+                @click="handleRemoveMember(memberId)"
+              >
+                踢出
+              </el-button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 添加成员 -->
+        <div class="add-member-section">
+          <h4>添加成员</h4>
+          <div class="online-user-list">
+            <div 
+              v-for="user in availableUsers" 
+              :key="user.userId"
+              class="add-member-item"
+            >
+              <div class="member-info">
+                <img :src="user.avatar || getUserAvatar(user.userId)" class="member-avatar" alt="头像" />
+                <span class="member-name">{{ user.nickname }}</span>
+              </div>
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="handleAddMember(user.userId)"
+              >
+                添加
+              </el-button>
+            </div>
+            <el-empty 
+              v-if="availableUsers.length === 0" 
+              description="没有可添加的用户"
+              :image-size="60"
+            />
+          </div>
+        </div>
+      </div>
     </el-dialog>
     
     <!-- 编辑个人资料对话框 -->
@@ -465,17 +539,18 @@
   
   // 状态
   const activeTab = ref('recent')  // 当前标签页：recent、online 或 group
-  const onlineUsers = ref([])  // 在线用户列表
-  const recentContacts = ref([])  // 最近联系人列表（私聊）
+  const onlineUsers = ref([])  // 在线用户列表 (UserInfoDTO[])
+  const recentContacts = ref([])  // 最近联系人列表（私聊）(UserInfoDTO[])
   const recentGroups = ref([])  // 最近群聊列表
   const groupList = ref([])  // 群组列表
-  const currentChatUser = ref('')
+  const currentChatUser = ref('')  // 当前聊天用户的userId
   const currentChatGroup = ref('')  // 当前聊天的群组ID
   const chatType = ref('user')  // 聊天类型：user-私聊，group-群聊
   const messages = reactive({}) // { userId/groupId: [messages] }
   const unreadCount = reactive({}) // { userId/groupId: count }
   const inputMessage = ref('')
   const messageListRef = ref(null)
+  const userInfoCache = reactive({}) // userId -> UserInfo 缓存
   
   // 创建群组对话框
   const createGroupDialogVisible = ref(false)
@@ -484,6 +559,10 @@
     description: '',
     memberIds: []
   })
+  
+  // 管理群成员对话框
+  const manageMembersDialogVisible = ref(false)
+  const currentGroupMembers = ref([])  // 当前群组成员ID列表
   
   // 个人资料编辑
   const showProfileDialog = ref(false)
@@ -531,11 +610,25 @@
       if (currentChatUser.value === AI_ASSISTANT_ID) {
         return 'AI智能助手 🤖'
       }
-      return currentChatUser.value ? `与 ${currentChatUser.value} 聊天` : ''
+      const nickname = getUserNickname(currentChatUser.value)
+      return currentChatUser.value ? `与 ${nickname} 聊天` : ''
     } else {
       const group = groupList.value.find(g => g.groupId === currentChatGroup.value)
       return group ? `${group.groupName}` : ''
     }
+  })
+  
+  // 发送按钮是否禁用
+  const isSendDisabled = computed(() => {
+    return !inputMessage.value || inputMessage.value.trim().length === 0
+  })
+  
+  // 可添加的用户（不在群组中的在线用户）
+  const availableUsers = computed(() => {
+    if (!currentChatGroup.value) return []
+    return onlineUsers.value.filter(user => {
+      return !currentGroupMembers.value.includes(user.userId)
+    })
   })
   
   // 初始化
@@ -580,7 +673,12 @@
       const users = response.data || []
       
       // 过滤掉自己
-      onlineUsers.value = users.filter(u => u !== userStore.userId)
+      onlineUsers.value = users.filter(u => u.userId !== userStore.userId)
+      
+      // 更新用户信息缓存
+      users.forEach(user => {
+        userInfoCache[user.userId] = user
+      })
       
       console.log('在线用户列表:', onlineUsers.value)
     } catch (error) {
@@ -594,6 +692,11 @@
       const response = await messageApi.getRecentContacts(userStore.userId)
       // 拦截器已自动提取 Result.data
       recentContacts.value = response.data || []
+      
+      // 更新用户信息缓存
+      recentContacts.value.forEach(user => {
+        userInfoCache[user.userId] = user
+      })
       
       console.log('最近联系人列表:', recentContacts.value)
     } catch (error) {
@@ -795,8 +898,9 @@
     // 处理系统消息：用户上线
     if (message.type === 'user_online') {
       const newUserId = message.fromUserId
-      if (!onlineUsers.value.includes(newUserId) && newUserId !== userStore.userId) {
-        onlineUsers.value.push(newUserId)
+      if (!isUserOnline(newUserId) && newUserId !== userStore.userId) {
+        // 重新加载在线用户列表
+        loadOnlineUsers()
         ElMessage.success(`${newUserId} 上线了`)
         console.log('用户上线:', newUserId)
       }
@@ -806,10 +910,11 @@
     // 处理系统消息：用户下线
     if (message.type === 'user_offline') {
       const offlineUserId = message.fromUserId
-      const index = onlineUsers.value.indexOf(offlineUserId)
+      const index = onlineUsers.value.findIndex(u => u.userId === offlineUserId)
       if (index > -1) {
+        const offlineUser = onlineUsers.value[index]
         onlineUsers.value.splice(index, 1)
-        ElMessage.info(`${offlineUserId} 下线了`)
+        ElMessage.info(`${offlineUser.nickname} 下线了`)
         console.log('用户下线:', offlineUserId)
       }
       return
@@ -821,6 +926,28 @@
       // 刷新群组列表
       loadRecentGroups()
       loadUserGroups()
+      return
+    }
+    
+    // 处理系统消息：成员被添加通知
+    if (message.type === 'member_added') {
+      ElMessage.success(message.message)
+      // 刷新群组列表
+      loadRecentGroups()
+      loadUserGroups()
+      return
+    }
+    
+    // 处理系统消息：成员被移除通知
+    if (message.type === 'member_removed') {
+      ElMessage.warning(message.message)
+      // 刷新群组列表
+      loadRecentGroups()
+      loadUserGroups()
+      // 如果当前正在这个群组的聊天窗口，关闭它
+      if (chatType.value === 'group' && currentChatGroup.value === message.groupId) {
+        closeChat()
+      }
       return
     }
     
@@ -859,8 +986,21 @@
     // 处理群聊消息
     else if (message.type === 'group_chat') {
       const groupId = message.groupId
+      const fromUserId = message.fromUserId
       
       console.log('收到群聊消息:', message)
+      
+      // 如果缓存中没有发送者信息，异步加载
+      if (fromUserId && !userInfoCache[fromUserId]) {
+        messageApi.batchGetUserInfo([fromUserId]).then(response => {
+          const users = response.data || []
+          users.forEach(user => {
+            userInfoCache[user.userId] = user
+          })
+        }).catch(error => {
+          console.error('加载发送者信息失败:', error)
+        })
+      }
       
       // 初始化消息数组
       if (!messages[groupId]) {
@@ -977,6 +1117,27 @@
       const response = await messageApi.getGroupHistory(group.groupId)
       messages[group.groupId] = response.data || []
       console.log('群聊历史消息:', messages[group.groupId])
+      
+      // 提取所有发送者的userId，批量加载用户信息
+      const userIds = new Set()
+      messages[group.groupId].forEach(msg => {
+        if (msg.fromUserId && !userInfoCache[msg.fromUserId]) {
+          userIds.add(msg.fromUserId)
+        }
+      })
+      
+      if (userIds.size > 0) {
+        try {
+          const userResponse = await messageApi.batchGetUserInfo(Array.from(userIds))
+          const users = userResponse.data || []
+          users.forEach(user => {
+            userInfoCache[user.userId] = user
+          })
+          console.log('批量加载群聊成员信息:', users.length, '个用户')
+        } catch (error) {
+          console.error('加载群聊成员信息失败:', error)
+        }
+      }
     } catch (error) {
       console.error('加载群聊历史失败:', error)
     }
@@ -1130,6 +1291,32 @@
       const response = await searchApi.searchMessages(searchKeyword.value)
       searchResults.value = response.data || []
       showSearchResults.value = true
+      
+      // 提取所有涉及的用户ID并加载到缓存
+      if (searchResults.value.length > 0) {
+        const userIds = new Set()
+        searchResults.value.forEach(msg => {
+          if (msg.fromUserId) userIds.add(msg.fromUserId)
+          if (msg.toUserId && msg.messageType === 1) userIds.add(msg.toUserId)
+        })
+        
+        // 过滤掉已经在缓存中的用户
+        const uncachedUserIds = Array.from(userIds).filter(id => !userInfoCache[id])
+        
+        // 批量加载用户信息
+        if (uncachedUserIds.length > 0) {
+          try {
+            const response = await messageApi.batchGetUserInfo(uncachedUserIds)
+            const users = response.data || []
+            users.forEach(user => {
+              userInfoCache[user.userId] = user
+            })
+            console.log('批量加载用户信息:', users.length, '个用户')
+          } catch (error) {
+            console.error('加载用户信息失败:', error)
+          }
+        }
+      }
       
       if (searchResults.value.length === 0) {
         ElMessage.info('没有找到相关消息')
@@ -1298,8 +1485,25 @@
     }
   }
   
+  // 检查用户是否在线
+  const isUserOnline = (userId) => {
+    return onlineUsers.value.some(u => u.userId === userId)
+  }
+  
+  // 根据userId获取用户昵称
+  const getUserNickname = (userId) => {
+    if (userInfoCache[userId]) {
+      return userInfoCache[userId].nickname
+    }
+    return userId // 如果缓存中没有，返回userId
+  }
+  
   // 获取用户头像（使用UI Avatars生成）
   const getUserAvatar = (userId) => {
+    // 优先从缓存中获取用户头像
+    if (userInfoCache[userId] && userInfoCache[userId].avatar) {
+      return userInfoCache[userId].avatar
+    }
     // 使用UI Avatars API根据用户ID生成头像
     const colors = ['667eea', 'f093fb', '4facfe', '43e97b', 'fa709a', 'fee140', '30cfd0', 'a8edea']
     const colorIndex = userId.charCodeAt(0) % colors.length
@@ -1339,6 +1543,99 @@
       userStore.logout()
       router.push('/login')
     }
+  }
+  
+  // 打开管理成员对话框
+  const openManageMembersDialog = async () => {
+    if (!currentChatGroup.value) return
+    
+    try {
+      // 加载群组成员列表
+      const response = await groupApi.getGroupMembers(currentChatGroup.value)
+      currentGroupMembers.value = response.data || []
+      
+      // 批量加载成员信息到缓存
+      const uncachedUserIds = currentGroupMembers.value.filter(id => !userInfoCache[id])
+      if (uncachedUserIds.length > 0) {
+        try {
+          const userResponse = await messageApi.batchGetUserInfo(uncachedUserIds)
+          const users = userResponse.data || []
+          users.forEach(user => {
+            userInfoCache[user.userId] = user
+          })
+        } catch (error) {
+          console.error('加载成员信息失败:', error)
+        }
+      }
+      
+      manageMembersDialogVisible.value = true
+    } catch (error) {
+      console.error('加载群组成员失败:', error)
+      ElMessage.error('加载群组成员失败')
+    }
+  }
+  
+  // 添加成员到群组
+  const handleAddMember = async (userId) => {
+    if (!currentChatGroup.value) return
+    
+    try {
+      await groupApi.addMember(currentChatGroup.value, userId)
+      ElMessage.success('添加成功')
+      
+      // 刷新成员列表
+      const response = await groupApi.getGroupMembers(currentChatGroup.value)
+      currentGroupMembers.value = response.data || []
+      
+      // 刷新群组列表（更新成员数量）
+      await loadUserGroups()
+      await loadRecentGroups()
+    } catch (error) {
+      console.error('添加成员失败:', error)
+      ElMessage.error('添加失败：' + (error.message || '未知错误'))
+    }
+  }
+  
+  // 从群组移除成员
+  const handleRemoveMember = async (userId) => {
+    if (!currentChatGroup.value) return
+    
+    try {
+      await ElMessageBox.confirm(
+        `确定要将 ${getUserNickname(userId)} 移出群组吗？`,
+        '确认',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+      
+      await groupApi.removeMember(currentChatGroup.value, userId)
+      ElMessage.success('移除成功')
+      
+      // 刷新成员列表
+      const response = await groupApi.getGroupMembers(currentChatGroup.value)
+      currentGroupMembers.value = response.data || []
+      
+      // 刷新群组列表（更新成员数量）
+      await loadUserGroups()
+      await loadRecentGroups()
+    } catch (error) {
+      if (error === 'cancel') {
+        console.log('用户取消移除')
+      } else {
+        console.error('移除成员失败:', error)
+        ElMessage.error('移除失败：' + (error.message || '未知错误'))
+      }
+    }
+  }
+  
+  // 判断是否是群主
+  const isGroupOwner = (userId) => {
+    if (!currentChatGroup.value) return false
+    const group = groupList.value.find(g => g.groupId === currentChatGroup.value)
+    return group && group.creatorId === userId
   }
   </script>
   
@@ -1953,5 +2250,66 @@
       opacity: 1;
       transform: scale(1.2);
     }
+  }
+  
+  /* 管理群成员对话框样式 */
+  .manage-members-content {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  
+  .member-section, .add-member-section {
+    margin-bottom: 20px;
+  }
+  
+  .member-section h4, .add-member-section h4 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    color: #303133;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #409eff;
+  }
+  
+  .member-list, .online-user-list {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  
+  .member-item, .add-member-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    transition: all 0.3s;
+  }
+  
+  .member-item:hover, .add-member-item:hover {
+    background: #f5f7fa;
+    border-color: #409eff;
+    transform: translateX(2px);
+  }
+  
+  .member-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+  }
+  
+  .member-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e4e7ed;
+  }
+  
+  .member-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
   }
   </style>

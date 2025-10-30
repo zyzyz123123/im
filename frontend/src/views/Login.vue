@@ -6,10 +6,10 @@
         </template>
         
         <el-form :model="form" @submit.prevent="handleLogin">
-          <el-form-item label="用户ID">
+          <el-form-item label="昵称">
             <el-input 
-              v-model="form.userId" 
-              placeholder="请输入用户ID"
+              v-model="form.nickname" 
+              placeholder="请输入昵称"
               clearable
             />
           </el-form-item>
@@ -67,7 +67,7 @@
   const userStore = useUserStore()
   
   const form = ref({
-    userId: '',
+    nickname: '',
     password: ''
   })
   
@@ -76,8 +76,8 @@
   
   const handleLogin = async () => {
     // 表单验证
-    if (!form.value.userId.trim()) {
-      error.value = '请输入用户ID'
+    if (!form.value.nickname.trim()) {
+      error.value = '请输入昵称'
       return
     }
     
@@ -92,7 +92,7 @@
     try {
       // 调用登录接口（拦截器已自动提取 Result.data）
       const response = await login({
-        userId: form.value.userId,
+        nickname: form.value.nickname,
         password: form.value.password
       })
       

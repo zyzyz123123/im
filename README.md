@@ -63,6 +63,7 @@ CREATE TABLE t_user (
 CREATE TABLE t_message (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     message_id VARCHAR(50) UNIQUE NOT NULL,
+    group_id VARCHAR(50) DEFAULT NULL, 
     from_user_id VARCHAR(50) NOT NULL,
     to_user_id VARCHAR(50) NOT NULL,
     content TEXT,
@@ -159,7 +160,7 @@ npm install
 npm run dev
 ```
 
-访问：http://localhost:5173
+访问：http://120.48.139.174
 
 ## 📸 界面展示
 

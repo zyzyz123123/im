@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-const BASE_URL = 'http://localhost:8080'
+// 从环境变量读取 API 地址
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 const request = axios.create({
   baseURL: BASE_URL,
@@ -48,6 +49,20 @@ export const groupApi = {
   getGroupMembers(groupId) {
     return request.get('/group/members', {
       params: { groupId }
+    })
+  },
+  
+  // 添加成员到群组
+  addMember(groupId, userId) {
+    return request.post('/group/addMember', null, {
+      params: { groupId, userId }
+    })
+  },
+  
+  // 从群组移除成员
+  removeMember(groupId, userId) {
+    return request.post('/group/removeMember', null, {
+      params: { groupId, userId }
     })
   }
 }

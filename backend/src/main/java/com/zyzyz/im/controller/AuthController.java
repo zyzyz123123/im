@@ -25,12 +25,15 @@ public class AuthController {
     private UserService userService;
 
     @PostMapping("/register")
-        public Result<String> register(@RequestBody RegisterRequest registerRequest) {
-        if (userService.getUserByUserId(registerRequest.getUserId()) != null) {
-            return Result.error("注册失败，用户名已存在");
+    public Result<String> register(@RequestBody RegisterRequest registerRequest) {
+        try {
+            // 昵称唯一性检查在 UserService 中进行
+            userService.register(registerRequest);
+            return Result.success("注册成功");
+        } catch (RuntimeException e) {
+            // 捕获服务层抛出的异常（如昵称已存在）
+            return Result.error(e.getMessage());
         }
-        userService.register(registerRequest);
-        return Result.success("注册成功");
     }
 
     @PostMapping("/login")

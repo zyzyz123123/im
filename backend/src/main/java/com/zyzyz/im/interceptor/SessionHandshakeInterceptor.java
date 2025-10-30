@@ -32,17 +32,23 @@ public class SessionHandshakeInterceptor implements HandshakeInterceptor {
             ServletServerHttpRequest servletRequest = (ServletServerHttpRequest) request;
             HttpServletRequest httpRequest = servletRequest.getServletRequest();
             
-            // 获取 HTTP Session（false 表示不创建新 Session）
-            HttpSession session = httpRequest.getSession(false);
+            String userId = null;
             
+            // 方案1：优先从 URL 参数中获取 userId（用于 WebSocket 连接）
+            userId = httpRequest.getParameter("userId");
+            if (userId != null && !userId.isEmpty()) {
+                attributes.put("userId", userId);
+                System.out.println("WebSocket 连接鉴权成功（URL参数）：userId = " + userId);
+                return true;
+            }
+            
+            // 方案2：从 HTTP Session 中获取 userId（兼容旧方式）
+            HttpSession session = httpRequest.getSession(false);
             if (session != null) {
-                // 从 Session 中获取 userId
-                String userId = (String) session.getAttribute("userId");
-                
+                userId = (String) session.getAttribute("userId");
                 if (userId != null && !userId.isEmpty()) {
-                    // 将 userId 存入 WebSocket session attributes
                     attributes.put("userId", userId);
-                    System.out.println("WebSocket 连接鉴权成功：userId = " + userId + ", SessionID: " + session.getId());
+                    System.out.println("WebSocket 连接鉴权成功（Session）：userId = " + userId + ", SessionID: " + session.getId());
                     return true;
                 }
             }

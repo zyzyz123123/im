@@ -7,9 +7,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.zyzyz.im.service.MessageService;
+import com.zyzyz.im.service.UserService;
+import com.zyzyz.im.dto.UserInfoDTO;
 import com.zyzyz.im.entity.Message;
 import com.zyzyz.im.manager.WebsocketSessionManager;
 import com.zyzyz.im.common.Result;
@@ -23,6 +26,9 @@ public class MessageController {
 
     @Autowired
     private WebsocketSessionManager websocketSessionManager;
+    
+    @Autowired
+    private UserService userService;
     
     @GetMapping("/history")
     public Result<List<Message>> getMessages(@RequestParam String fromUserId, @RequestParam String toUserId) {
@@ -49,8 +55,9 @@ public class MessageController {
     }
 
     @GetMapping("/online/users")
-    public Result<List<String>> getOnlineUsers() {
-        List<String> onlineUsers = websocketSessionManager.getOnlineUsers();
+    public Result<List<UserInfoDTO>> getOnlineUsers() {
+        List<String> onlineUserIds = websocketSessionManager.getOnlineUsers();
+        List<UserInfoDTO> onlineUsers = userService.getUserInfoByUserIds(onlineUserIds);
         return Result.success(onlineUsers);
     }
 
@@ -61,8 +68,9 @@ public class MessageController {
     }
     
     @GetMapping("/contacts")
-    public Result<List<String>> getRecentContacts(@RequestParam String userId) {
-        List<String> contacts = messageService.selectRecentContactsByUserId(userId);
+    public Result<List<UserInfoDTO>> getRecentContacts(@RequestParam String userId) {
+        List<String> contactIds = messageService.selectRecentContactsByUserId(userId);
+        List<UserInfoDTO> contacts = userService.getUserInfoByUserIds(contactIds);
         return Result.success(contacts);
     }
     
@@ -70,5 +78,11 @@ public class MessageController {
     public Result<List<Message>> getGroupMessages(@RequestParam String groupId) {
         List<Message> messages = messageService.selectByGroupId(groupId);
         return Result.success(messages);
+    }
+    
+    @PostMapping("/users/batch")
+    public Result<List<UserInfoDTO>> batchGetUserInfo(@RequestBody List<String> userIds) {
+        List<UserInfoDTO> users = userService.getUserInfoByUserIds(userIds);
+        return Result.success(users);
     }
 }

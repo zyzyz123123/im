@@ -144,5 +144,70 @@ public class GroupServiceImpl implements GroupService {
                         .build())
                 .collect(Collectors.toList());
     }
+    
+    @Override
+    @Transactional
+    public void addMemberToGroup(String groupId, String userId, String operatorId) {
+        // 检查操作者权限
+        if (!isGroupAdmin(groupId, operatorId)) {
+            throw new RuntimeException("您没有权限添加成员");
+        }
+        
+        // 检查用户是否已经在群组中
+        if (isUserInGroup(groupId, userId)) {
+            throw new RuntimeException("该用户已经是群成员");
+        }
+        
+        // 添加成员
+        GroupMember member = GroupMember.builder()
+                .groupId(groupId)
+                .userId(userId)
+                .role("member")
+                .nickname("")
+                .joinedAt(LocalDateTime.now())
+                .build();
+        groupMemberMapper.insert(member);
+        
+        // 更新群成员数量
+        int memberCount = groupMemberMapper.countByGroupId(groupId);
+        groupMapper.updateMemberCount(groupId, memberCount);
+    }
+    
+    @Override
+    @Transactional
+    public void removeMemberFromGroup(String groupId, String userId, String operatorId) {
+        // 检查操作者权限
+        if (!isGroupAdmin(groupId, operatorId)) {
+            throw new RuntimeException("您没有权限移除成员");
+        }
+        
+        // 检查被移除的用户是否在群组中
+        if (!isUserInGroup(groupId, userId)) {
+            throw new RuntimeException("该用户不在群组中");
+        }
+        
+        // 不能移除群主
+        GroupMember member = groupMemberMapper.selectByGroupIdAndUserId(groupId, userId);
+        if ("owner".equals(member.getRole())) {
+            throw new RuntimeException("不能移除群主");
+        }
+        
+        // 移除成员
+        groupMemberMapper.deleteByGroupIdAndUserId(groupId, userId);
+        
+        // 更新群成员数量
+        int memberCount = groupMemberMapper.countByGroupId(groupId);
+        groupMapper.updateMemberCount(groupId, memberCount);
+    }
+    
+    @Override
+    public boolean isGroupAdmin(String groupId, String userId) {
+        GroupMember member = groupMemberMapper.selectByGroupIdAndUserId(groupId, userId);
+        if (member == null) {
+            return false;
+        }
+        // 群主和管理员都有管理权限
+        return "owner".equals(member.getRole()) || "admin".equals(member.getRole());
+    }
 }
 

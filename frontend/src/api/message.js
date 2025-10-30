@@ -1,8 +1,8 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-// 后端地址
-const BASE_URL = 'http://localhost:8080'
+// 从环境变量读取 API 地址
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 // 创建axios实例
 const request = axios.create({
@@ -93,5 +93,10 @@ export const messageApi = {
     return request.get('/message/group/history', {
       params: { groupId }
     })
+  },
+  
+  // 批量获取用户信息
+  batchGetUserInfo(userIds) {
+    return request.post('/message/users/batch', userIds)
   }
 }

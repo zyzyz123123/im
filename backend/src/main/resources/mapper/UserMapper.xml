@@ -10,6 +10,10 @@
         SELECT * FROM t_user WHERE user_id = #{userId}
     </select>
     
+    <select id="selectByNickname" parameterType="string" resultType="com.zyzyz.im.entity.User">
+        SELECT * FROM t_user WHERE nickname = #{nickname}
+    </select>
+    
     <update id="updateUser" parameterType="com.zyzyz.im.entity.User">
         UPDATE t_user 
         <set>
@@ -20,4 +24,12 @@
         </set>
         WHERE user_id = #{userId}
     </update>
+    
+    <select id="selectByUserIds" resultType="com.zyzyz.im.entity.User">
+        SELECT * FROM t_user 
+        WHERE user_id IN
+        <foreach item="userId" collection="userIds" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </select>
 </mapper>

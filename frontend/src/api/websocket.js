@@ -9,13 +9,16 @@ class WebSocketClient {
     this.isManualClose = false
   }
   
-  // 连接WebSocket（使用 Session 鉴权，Cookie 会自动发送）
+  // 连接WebSocket（通过 URL 参数传递 userId）
   connect(userId) {
     return new Promise((resolve, reject) => {
       this.userId = userId
       this.isManualClose = false
       
-      const wsUrl = `ws://localhost:8080/ws`
+      // 从环境变量读取 WebSocket 地址
+      const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080'
+      // 在 URL 中添加 userId 参数
+      const wsUrl = `${WS_BASE_URL}/ws?userId=${encodeURIComponent(userId)}`
       
       this.ws = new WebSocket(wsUrl)
       

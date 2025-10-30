@@ -6,20 +6,15 @@
       </template>
       
       <el-form :model="form" @submit.prevent="handleRegister">
-        <el-form-item label="用户ID">
-          <el-input 
-            v-model="form.userId" 
-            placeholder="请输入用户ID（唯一标识）"
-            clearable
-          />
-        </el-form-item>
-        
         <el-form-item label="昵称">
           <el-input 
             v-model="form.nickname" 
-            placeholder="请输入昵称"
+            placeholder="请输入昵称（用于登录，需唯一）"
             clearable
           />
+          <div style="color: #909399; font-size: 12px; margin-top: 5px;">
+            昵称将作为您的登录凭证，请牢记
+          </div>
         </el-form-item>
         
         <el-form-item label="密码">
@@ -141,7 +136,6 @@ const colorSchemes = [
 ]
 
 const form = ref({
-  userId: '',
   nickname: '',
   password: '',
   confirmPassword: '',
@@ -177,11 +171,6 @@ const error = ref('')
 
 const handleRegister = async () => {
   // 表单验证
-  if (!form.value.userId.trim()) {
-    error.value = '请输入用户ID'
-    return
-  }
-  
   if (!form.value.nickname.trim()) {
     error.value = '请输入昵称'
     return
@@ -208,7 +197,6 @@ const handleRegister = async () => {
   try {
     // 调用注册接口（拦截器已自动提取 Result.data）
     await register({
-      userId: form.value.userId,
       nickname: form.value.nickname,
       password: form.value.password,
       email: form.value.email,
@@ -216,7 +204,7 @@ const handleRegister = async () => {
     })
     
     // 注册成功
-    ElMessage.success('注册成功，请登录')
+    ElMessage.success('注册成功，请使用昵称登录')
     router.push('/login')
   } catch (err) {
     console.error('注册失败:', err)

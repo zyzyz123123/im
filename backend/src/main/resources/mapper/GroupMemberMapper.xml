@@ -49,5 +49,10 @@
         SELECT COUNT(*) FROM t_group_member WHERE group_id = #{groupId}
     </select>
     
+    <!-- 删除群成员 -->
+    <delete id="deleteByGroupIdAndUserId">
+        DELETE FROM t_group_member WHERE group_id = #{groupId} AND user_id = #{userId}
+    </delete>
+    
 </mapper>
 

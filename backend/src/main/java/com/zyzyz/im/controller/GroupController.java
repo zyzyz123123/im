@@ -119,6 +119,60 @@ public class GroupController {
     }
     
     /**
+     * 添加成员到群组
+     */
+    @PostMapping("/addMember")
+    public Result<String> addMember(
+            @RequestParam String groupId,
+            @RequestParam String userId,
+            HttpSession session
+    ) {
+        String operatorId = (String) session.getAttribute("userId");
+        if (operatorId == null) {
+            return Result.error("未登录");
+        }
+        
+        try {
+            groupService.addMemberToGroup(groupId, userId, operatorId);
+            
+            // 通知新成员刷新群组列表
+            notifyMemberAdded(userId, groupId);
+            
+            return Result.success("添加成功", null);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("添加失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 从群组中移除成员
+     */
+    @PostMapping("/removeMember")
+    public Result<String> removeMember(
+            @RequestParam String groupId,
+            @RequestParam String userId,
+            HttpSession session
+    ) {
+        String operatorId = (String) session.getAttribute("userId");
+        if (operatorId == null) {
+            return Result.error("未登录");
+        }
+        
+        try {
+            groupService.removeMemberFromGroup(groupId, userId, operatorId);
+            
+            // 通知被移除的成员
+            notifyMemberRemoved(userId, groupId);
+            
+            return Result.success("移除成功", null);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("移除失败：" + e.getMessage());
+        }
+    }
+    
+    /**
      * 通知成员刷新群组列表
      */
     private void notifyMembersToRefreshGroups(List<String> memberIds, String groupName) {
@@ -136,6 +190,52 @@ public class GroupController {
                 if (session != null && session.isOpen()) {
                     session.sendMessage(textMessage);
                 }
+            }
+        } catch (Exception e) {
+            System.err.println("通知成员失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 通知新成员加入群组
+     */
+    private void notifyMemberAdded(String userId, String groupId) {
+        try {
+            ChatMessage notification = ChatMessage.builder()
+                    .type("member_added")
+                    .groupId(groupId)
+                    .message("您已被添加到群组")
+                    .build();
+            
+            String messageJson = objectMapper.writeValueAsString(notification);
+            TextMessage textMessage = new TextMessage(messageJson);
+            
+            WebSocketSession session = websocketSessionManager.getSession(userId);
+            if (session != null && session.isOpen()) {
+                session.sendMessage(textMessage);
+            }
+        } catch (Exception e) {
+            System.err.println("通知成员失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 通知成员被移除
+     */
+    private void notifyMemberRemoved(String userId, String groupId) {
+        try {
+            ChatMessage notification = ChatMessage.builder()
+                    .type("member_removed")
+                    .groupId(groupId)
+                    .message("您已被移出群组")
+                    .build();
+            
+            String messageJson = objectMapper.writeValueAsString(notification);
+            TextMessage textMessage = new TextMessage(messageJson);
+            
+            WebSocketSession session = websocketSessionManager.getSession(userId);
+            if (session != null && session.isOpen()) {
+                session.sendMessage(textMessage);
             }
         } catch (Exception e) {
             System.err.println("通知成员失败：" + e.getMessage());

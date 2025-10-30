@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-const API_BASE_URL = 'http://localhost:8080'
+// 从环境变量读取 API 地址
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 const authAPI = axios.create({
   baseURL: API_BASE_URL,
@@ -45,7 +46,7 @@ authAPI.interceptors.response.use(
  */
 export function register(data) {
   return authAPI.post('/auth/register', {
-    userId: data.userId,
+    // userId 由后端自动生成，不需要前端传递
     password: data.password,
     nickname: data.nickname,
     avatar: data.avatar || '',
@@ -58,7 +59,7 @@ export function register(data) {
  */
 export function login(data) {
   return authAPI.post('/auth/login', {
-    userId: data.userId,
+    nickname: data.nickname,  // 使用昵称登录
     password: data.password
   })
 }

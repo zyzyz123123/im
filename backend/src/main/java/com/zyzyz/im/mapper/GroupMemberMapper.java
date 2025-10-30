@@ -26,5 +26,8 @@ public interface GroupMemberMapper {
     
     // 统计群成员数量
     int countByGroupId(@Param("groupId") String groupId);
+    
+    // 删除群成员
+    void deleteByGroupIdAndUserId(@Param("groupId") String groupId, @Param("userId") String userId);
 }
 

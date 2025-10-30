@@ -1,6 +1,10 @@
 package com.zyzyz.im.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -10,6 +14,7 @@ import com.zyzyz.im.dto.RegisterRequest;
 import com.zyzyz.im.dto.LoginRequest;
 import com.zyzyz.im.dto.LoginResponse;
 import com.zyzyz.im.dto.UpdateUserRequest;
+import com.zyzyz.im.dto.UserInfoDTO;
 import com.zyzyz.im.entity.User;
 import com.zyzyz.im.mapper.UserMapper;
 import com.zyzyz.im.service.UserService;
@@ -25,8 +30,17 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void register(RegisterRequest registerRequest) {
+        // 检查昵称是否已存在
+        User existingUser = userMapper.selectByNickname(registerRequest.getNickname());
+        if (existingUser != null) {
+            throw new RuntimeException("昵称已被使用，请换一个昵称");
+        }
+        
+        // 生成UUID作为userId
+        String userId = UUID.randomUUID().toString().replace("-", "");
+        
         userMapper.insert(User.builder()
-        .userId(registerRequest.getUserId())
+        .userId(userId)
         .password(passwordEncoder.encode(registerRequest.getPassword()))
         .nickname(registerRequest.getNickname())
         .avatar(registerRequest.getAvatar())
@@ -39,7 +53,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginResponse login(LoginRequest loginRequest) {
-        User user = userMapper.selectByUserId(loginRequest.getUserId());
+        // 通过昵称查询用户
+        User user = userMapper.selectByNickname(loginRequest.getNickname());
         if (user == null) {
             throw new RuntimeException("用户不存在");
         }
@@ -70,5 +85,22 @@ public class UserServiceImpl implements UserService {
                 .updatedAt(LocalDateTime.now())
                 .build();
         userMapper.updateUser(user);
+    }
+    
+    @Override
+    public List<UserInfoDTO> getUserInfoByUserIds(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<User> users = userMapper.selectByUserIds(userIds);
+        return users.stream()
+                .map(user -> UserInfoDTO.builder()
+                        .userId(user.getUserId())
+                        .nickname(user.getNickname())
+                        .avatar(user.getAvatar())
+                        .email(user.getEmail())
+                        .build())
+                .collect(Collectors.toList());
     }
 }
