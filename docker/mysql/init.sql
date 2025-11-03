@@ -5,7 +5,7 @@ CREATE DATABASE IF NOT EXISTS `im` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4
 USE `im`;
 
 -- 用户表
-CREATE TABLE IF NOT EXISTS `users` (
+CREATE TABLE IF NOT EXISTS `t_user` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_id` VARCHAR(64) NOT NULL COMMENT '用户ID（唯一标识）',
   `password` VARCHAR(255) NOT NULL COMMENT '密码（加密存储）',
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- 群组表
-CREATE TABLE IF NOT EXISTS `groups` (
+CREATE TABLE IF NOT EXISTS `t_group` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `group_id` VARCHAR(64) NOT NULL COMMENT '群组ID（唯一标识）',
   `group_name` VARCHAR(100) NOT NULL COMMENT '群组名称',
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `groups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群组表';
 
 -- 群组成员表
-CREATE TABLE IF NOT EXISTS `group_members` (
+CREATE TABLE IF NOT EXISTS `t_group_member` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `group_id` VARCHAR(64) NOT NULL COMMENT '群组ID',
   `user_id` VARCHAR(64) NOT NULL COMMENT '用户ID',
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS `group_members` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群组成员表';
 
 -- 消息表
-CREATE TABLE IF NOT EXISTS `messages` (
+CREATE TABLE IF NOT EXISTS `t_message` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `message_id` VARCHAR(64) NOT NULL COMMENT '消息ID（唯一标识）',
   `from_user_id` VARCHAR(64) NOT NULL COMMENT '发送者用户ID',
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS `messages` (
 
 -- 插入测试数据（可选）
 -- 创建测试用户
-INSERT INTO `users` (`user_id`, `password`, `nickname`, `email`, `status`) VALUES
+INSERT INTO `t_user` (`user_id`, `password`, `nickname`, `email`, `status`) VALUES
 ('user001', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '测试用户1', 'user1@example.com', 1),
 ('user002', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '测试用户2', 'user2@example.com', 1),
 ('user003', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '测试用户3', 'user3@example.com', 1)

@@ -49,7 +49,9 @@ services:
 
   # Elasticsearch 搜索引擎
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.16.1
+    build:
+      context: ./docker/elasticsearch
+      dockerfile: Dockerfile
     container_name: im-elasticsearch
     restart: unless-stopped
     environment:

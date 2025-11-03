@@ -1,5 +1,5 @@
 # 多阶段构建 - 构建阶段
-FROM node:18-alpine AS build
+FROM node:20-slim AS build
 
 WORKDIR /app
 
