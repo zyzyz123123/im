@@ -2,7 +2,8 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 // 从环境变量读取 API 地址
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+// 生产环境使用相对路径（通过 Nginx 反向代理），开发环境使用 localhost
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8080' : '')
 
 // 创建axios实例
 const request = axios.create({

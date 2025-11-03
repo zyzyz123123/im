@@ -16,9 +16,12 @@ class WebSocketClient {
       this.isManualClose = false
       
       // 从环境变量读取 WebSocket 地址
-      const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080'
-      // 在 URL 中添加 userId 参数
-      const wsUrl = `${WS_BASE_URL}/ws?userId=${encodeURIComponent(userId)}`
+      // 生产环境使用相对路径（通过 Nginx 反向代理），开发环境使用 localhost
+      const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || (import.meta.env.DEV ? 'ws://localhost:8080' : '')
+      // 构建 WebSocket URL
+      const protocol = WS_BASE_URL ? '' : (window.location.protocol === 'https:' ? 'wss:' : 'ws:')
+      const host = WS_BASE_URL ? '' : '//' + window.location.host
+      const wsUrl = `${protocol}${host}${WS_BASE_URL}/ws?userId=${encodeURIComponent(userId)}`
       
       this.ws = new WebSocket(wsUrl)
       

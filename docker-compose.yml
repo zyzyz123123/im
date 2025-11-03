@@ -12,8 +12,10 @@ services:
       MYSQL_USER: ${MYSQL_USER:-imuser}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-impassword}
       TZ: Asia/Shanghai
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
+    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
+    # 如需调试，请使用 SSH 隧道连接
+    # ports:
+    #   - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -35,8 +37,10 @@ services:
     container_name: im-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
+    # 如需调试，请使用 SSH 隧道连接
+    # ports:
+    #   - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -59,9 +63,10 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - TZ=Asia/Shanghai
-    ports:
-      - "${ES_PORT:-9200}:9200"
-      - "9300:9300"
+    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
+    # ports:
+    #   - "${ES_PORT:-9200}:9200"
+    #   - "9300:9300"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -90,8 +95,10 @@ services:
       SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       AI_APIKEY: ${AI_APIKEY:-your-api-key-here}
       TZ: Asia/Shanghai
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
+    # 安全配置：后端不直接暴露，只通过 Nginx 反向代理访问
+    # 如需直接调试后端，可临时取消注释
+    # ports:
+    #   - "${BACKEND_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy
@@ -110,8 +117,9 @@ services:
       context: .
       dockerfile: ./frontend/Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost}
-        - VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-ws://localhost}
+        # 使用空字符串，让前端使用相对路径，通过 Nginx 反向代理访问后端
+        - VITE_API_BASE_URL=
+        - VITE_WS_BASE_URL=
     container_name: im-frontend
     restart: unless-stopped
     ports:
