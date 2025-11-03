@@ -12,10 +12,9 @@ services:
       MYSQL_USER: ${MYSQL_USER:-imuser}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-impassword}
       TZ: Asia/Shanghai
-    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
-    # 如需调试，请使用 SSH 隧道连接
-    # ports:
-    #   - "${MYSQL_PORT:-3306}:3306"
+    # 安全配置：只绑定本地，可通过 SSH 隧道访问（Navicat 等工具）
+    ports:
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -37,10 +36,9 @@ services:
     container_name: im-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
-    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
-    # 如需调试，请使用 SSH 隧道连接
-    # ports:
-    #   - "${REDIS_PORT:-6379}:6379"
+    # 安全配置：只绑定本地，可通过 SSH 隧道访问（Redis 工具）
+    ports:
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -63,10 +61,10 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
       - TZ=Asia/Shanghai
-    # 安全配置：不暴露到公网，只在 Docker 内部网络访问
-    # ports:
-    #   - "${ES_PORT:-9200}:9200"
-    #   - "9300:9300"
+    # 安全配置：只绑定本地，可通过 SSH 隧道访问（Kibana/调试工具）
+    ports:
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     healthcheck:
