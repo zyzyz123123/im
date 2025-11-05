@@ -15,4 +15,5 @@ public class ChatMessage {
     private String toUserId;    // 私聊时使用
     private String groupId;     // 群聊时使用
     private String message;
+    private String nickname;    // 用户昵称（用于上线/下线通知）
 }

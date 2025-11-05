@@ -86,6 +86,17 @@ public class UserServiceImpl implements UserService {
                 .build();
         userMapper.updateUser(user);
     }
+
+    @Override
+    public UserInfoDTO getUserInfoByUserId(String userId) {
+        User user = userMapper.selectByUserId(userId);
+        return UserInfoDTO.builder()
+                .userId(user.getUserId())
+                .nickname(user.getNickname())
+                .avatar(user.getAvatar())
+                .email(user.getEmail())
+                .build();
+    }
     
     @Override
     public List<UserInfoDTO> getUserInfoByUserIds(List<String> userIds) {

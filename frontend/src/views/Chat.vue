@@ -643,7 +643,6 @@
     try {
       // 连接WebSocket（使用 Session 鉴权，Cookie 会自动发送）
       await wsClient.connect(userStore.userId)
-      ElMessage.success('连接成功')
       
       // 监听消息
       wsClient.onMessage(handleReceiveMessage)
@@ -653,10 +652,20 @@
       await loadRecentContacts()
       await loadRecentGroups()
       await loadUserGroups()
+      
+      // 所有初始化完成后才显示成功提示
+      ElMessage.success('连接成功')
     } catch (error) {
       console.error('初始化失败:', error)
-      ElMessage.error('连接失败，请重新登录')
-      router.push('/login')
+      ElMessage.error('连接失败，登录可能已过期，请重新登录')
+      
+      // 清除前端登录状态
+      userStore.logout()
+      
+      // 跳转到登录页
+      setTimeout(() => {
+        router.push('/login')
+      }, 1500)
     }
   })
   
@@ -901,8 +910,10 @@
       if (!isUserOnline(newUserId) && newUserId !== userStore.userId) {
         // 重新加载在线用户列表
         loadOnlineUsers()
-        ElMessage.success(`${newUserId} 上线了`)
-        console.log('用户上线:', newUserId)
+        // 直接使用后端传来的昵称
+        const nickname = message.nickname || newUserId
+        ElMessage.success(`${nickname} 上线了`)
+        console.log('用户上线:', nickname, newUserId)
       }
       return
     }
@@ -954,6 +965,18 @@
     // 处理私聊消息
     if (message.type === 'chat') {
       const fromUser = message.fromUserId
+      
+      // 如果缓存中没有发送者信息，异步加载（修复白屏问题）
+      if (fromUser && !userInfoCache[fromUser]) {
+        messageApi.batchGetUserInfo([fromUser]).then(response => {
+          const users = response.data || []
+          users.forEach(user => {
+            userInfoCache[user.userId] = user
+          })
+        }).catch(error => {
+          console.error('加载发送者信息失败:', error)
+        })
+      }
       
       // 初始化消息数组
       if (!messages[fromUser]) {
@@ -1492,7 +1515,8 @@
   
   // 根据userId获取用户昵称
   const getUserNickname = (userId) => {
-    if (userInfoCache[userId]) {
+    if (!userId) return '未知用户'  // ← 修复：处理 undefined
+    if (userInfoCache[userId] && userInfoCache[userId].nickname) {
       return userInfoCache[userId].nickname
     }
     return userId // 如果缓存中没有，返回userId
@@ -1500,6 +1524,7 @@
   
   // 获取用户头像（使用UI Avatars生成）
   const getUserAvatar = (userId) => {
+    if (!userId) return 'https://ui-avatars.com/api/?name=Unknown&background=cccccc&color=fff&size=128'  // ← 修复：处理 undefined
     // 优先从缓存中获取用户头像
     if (userInfoCache[userId] && userInfoCache[userId].avatar) {
       return userInfoCache[userId].avatar

@@ -39,6 +39,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Autowired
     private MessageSearchService messageSearchService;
     
+    @Autowired
+    private com.zyzyz.im.service.UserService userService;
+    
     @Override
     public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
         super.afterConnectionEstablished(session);
@@ -210,11 +213,23 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      */
     private void broadcastUserStatus(String userId, String statusType) {
         try {
+            // 获取用户昵称
+            String nickname = userId;  // 默认使用 userId
+            try {
+                com.zyzyz.im.dto.UserInfoDTO userInfo = userService.getUserInfoByUserId(userId);
+                if (userInfo != null && userInfo.getNickname() != null) {
+                    nickname = userInfo.getNickname();
+                }
+            } catch (Exception e) {
+                System.err.println("获取用户昵称失败：" + e.getMessage());
+            }
+            
             ChatMessage statusMessage = ChatMessage.builder()
                     .type(statusType)
                     .fromUserId(userId)
                     .toUserId(null)
                     .message(null)
+                    .nickname(nickname)  // 添加昵称
                     .build();
             
             String messageJson = objectMapper.writeValueAsString(statusMessage);

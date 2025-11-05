@@ -14,7 +14,11 @@ public interface UserService {
     LoginResponse login(LoginRequest loginRequest);
     User getUserByUserId(String userId);
     void updateUser(UpdateUserRequest updateUserRequest);
-    
+
+    /**
+     * 获取用户信息
+     */
+    UserInfoDTO getUserInfoByUserId(String userId);
     /**
      * 批量查询用户信息
      */

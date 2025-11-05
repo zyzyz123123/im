@@ -35,8 +35,27 @@ authAPI.interceptors.response.use(
     return response
   },
   (error) => {
-    // 处理网络错误
     console.error('请求错误:', error)
+    
+    // 处理401未授权错误：session过期
+    if (error.response && error.response.status === 401) {
+      ElMessage.error('登录已过期，请重新登录')
+      
+      // 清除前端登录状态
+      localStorage.removeItem('userId')
+      localStorage.removeItem('nickname')
+      localStorage.removeItem('avatar')
+      localStorage.removeItem('email')
+      
+      // 跳转到登录页
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 1500)
+      
+      return Promise.reject(new Error('未登录或登录已过期'))
+    }
+    
+    // 处理其他网络错误
     ElMessage.error(error.message || '网络错误')
     return Promise.reject(error)
   }
