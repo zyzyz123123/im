@@ -81,7 +81,7 @@ class WebSocketClient {
   }
   
   // 发送私聊消息
-  sendMessage(toUserId, content) {
+  sendMessage(toUserId, content, messageType = 1) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket未连接')
       return false
@@ -91,7 +91,8 @@ class WebSocketClient {
       type: 'chat',  // 私聊
       fromUserId: this.userId,
       toUserId: toUserId,
-      message: content
+      message: content,
+      messageType: messageType  // 1-文字, 4-图片
     }
     
     this.ws.send(JSON.stringify(message))
@@ -99,7 +100,7 @@ class WebSocketClient {
   }
   
   // 发送群聊消息
-  sendGroupMessage(groupId, content) {
+  sendGroupMessage(groupId, content, messageType = 2) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket未连接')
       return false
@@ -109,7 +110,8 @@ class WebSocketClient {
       type: 'group_chat',  // 群聊
       fromUserId: this.userId,
       groupId: groupId,
-      message: content
+      message: content,
+      messageType: messageType  // 2-群聊文字, 4-图片
     }
     
     this.ws.send(JSON.stringify(message))

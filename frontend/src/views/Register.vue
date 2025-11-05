@@ -45,42 +45,59 @@
           />
         </el-form-item>
         
-        <el-form-item label="选择头像颜色">
-          <div class="avatar-preview-section">
-            <!-- 预览当前头像 -->
+        <el-form-item label="设置头像">
+          <div class="avatar-section">
+            <!-- 头像预览 -->
             <div class="avatar-preview">
               <img 
-                v-if="form.nickname && selectedColor" 
+                v-if="uploadedAvatarUrl" 
+                :src="uploadedAvatarUrl" 
+                alt="上传的头像" 
+              />
+              <img 
+                v-else-if="form.nickname && selectedColor" 
                 :src="generateAvatarUrl(form.nickname, selectedColor)" 
-                alt="头像预览" 
+                alt="生成的头像" 
               />
               <div v-else class="avatar-placeholder">
                 输入昵称后预览
               </div>
             </div>
             
-            <!-- 颜色选择器 -->
-            <div class="color-selector">
-              <div 
-                v-for="color in colorSchemes" 
-                :key="color.bg"
-                :class="['color-option', { selected: selectedColor.bg === color.bg }]"
-                :style="{ backgroundColor: '#' + color.bg }"
-                @click="selectColor(color)"
-                :title="color.name"
+            <!-- 上传头像按钮 -->
+            <div class="avatar-upload-section">
+              <input
+                ref="avatarInputRef"
+                type="file"
+                accept="image/*"
+                style="display: none"
+                @change="handleAvatarUpload"
+              />
+              <el-button
+                :icon="Upload"
+                :loading="isUploadingAvatar"
+                @click="handleSelectAvatar"
               >
-                <span v-if="selectedColor.bg === color.bg" class="check-icon">✓</span>
-              </div>
+                {{ uploadedAvatarUrl ? '更换头像' : '上传头像' }}
+              </el-button>
+              <div class="upload-tip">或选择颜色生成头像</div>
             </div>
           </div>
         </el-form-item>
         
-        <el-form-item label="自定义头像URL（可选）">
-          <el-input 
-            v-model="form.avatar" 
-            placeholder="或者输入头像图片链接"
-            clearable
-          />
+        <el-form-item label="选择头像颜色" v-if="!uploadedAvatarUrl">
+          <div class="color-selector">
+            <div 
+              v-for="color in colorSchemes" 
+              :key="color.bg"
+              :class="['color-option', { selected: selectedColor.bg === color.bg }]"
+              :style="{ backgroundColor: '#' + color.bg }"
+              @click="selectColor(color)"
+              :title="color.name"
+            >
+              <span v-if="selectedColor.bg === color.bg" class="check-icon">✓</span>
+            </div>
+          </div>
         </el-form-item>
         
         <el-form-item>
@@ -119,7 +136,9 @@
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Picture, Upload } from '@element-plus/icons-vue'
 import { register } from '../api/auth'
+import { fileApi } from '../api/file'
 
 const router = useRouter()
 
@@ -144,6 +163,9 @@ const form = ref({
 })
 
 const selectedColor = ref(colorSchemes[0]) // 默认第一个颜色
+const avatarInputRef = ref(null) // 头像文件输入引用
+const isUploadingAvatar = ref(false) // 上传状态
+const uploadedAvatarUrl = ref('') // 上传的头像URL
 
 // 根据昵称和颜色生成头像URL
 const generateAvatarUrl = (nickname, colorScheme) => {
@@ -153,7 +175,7 @@ const generateAvatarUrl = (nickname, colorScheme) => {
 
 // 监听昵称变化，自动更新头像
 watch(() => form.value.nickname, (newNickname) => {
-  if (newNickname && selectedColor.value) {
+  if (newNickname && selectedColor.value && !uploadedAvatarUrl.value) {
     form.value.avatar = generateAvatarUrl(newNickname, selectedColor.value)
   }
 })
@@ -161,8 +183,46 @@ watch(() => form.value.nickname, (newNickname) => {
 // 选择颜色
 const selectColor = (colorScheme) => {
   selectedColor.value = colorScheme
-  if (form.value.nickname) {
+  if (form.value.nickname && !uploadedAvatarUrl.value) {
     form.value.avatar = generateAvatarUrl(form.value.nickname, colorScheme)
+  }
+}
+
+// 触发头像文件选择
+const handleSelectAvatar = () => {
+  avatarInputRef.value?.click()
+}
+
+// 处理头像上传
+const handleAvatarUpload = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  // 验证文件类型
+  if (!file.type.startsWith('image/')) {
+    ElMessage.error('请选择图片文件')
+    return
+  }
+
+  // 验证文件大小（限制2MB）
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过2MB')
+    return
+  }
+
+  try {
+    isUploadingAvatar.value = true
+    const result = await fileApi.uploadFile(file, 'avatar')
+    uploadedAvatarUrl.value = result
+    form.value.avatar = result // 设置为上传的URL
+    ElMessage.success('头像上传成功')
+  } catch (error) {
+    console.error('头像上传失败:', error)
+    ElMessage.error('头像上传失败：' + (error.message || '未知错误'))
+  } finally {
+    isUploadingAvatar.value = false
+    // 清空input，允许重复选择同一文件
+    event.target.value = ''
   }
 }
 
@@ -245,7 +305,7 @@ const goToLogin = () => {
   color: #303133;
 }
 
-.avatar-preview-section {
+.avatar-section {
   display: flex;
   align-items: center;
   gap: 20px;
@@ -279,11 +339,22 @@ const goToLogin = () => {
   padding: 5px;
 }
 
+.avatar-upload-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-tip {
+  color: #909399;
+  font-size: 12px;
+}
+
 .color-selector {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  flex: 1;
 }
 
 .color-option {

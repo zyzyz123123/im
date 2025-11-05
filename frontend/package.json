@@ -9,9 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@formily/reactive-vue": "^2.3.7",
+    "@formily/vue": "^2.3.7",
+    "@vueuse/integrations": "^14.0.0",
     "axios": "^1.12.2",
     "element-plus": "^2.11.4",
+    "element-plus-x": "^1.1.11",
     "pinia": "^3.0.3",
+    "sortablejs": "^1.15.6",
     "vue": "^3.5.22",
     "vue-router": "^4.6.0"
   },

@@ -15,5 +15,6 @@ public class ChatMessage {
     private String toUserId;    // 私聊时使用
     private String groupId;     // 群聊时使用
     private String message;
+    private Integer messageType; // 内容类型：1-文字, 2-群聊文字, 3-AI对话, 4-图片
     private String nickname;    // 用户昵称（用于上线/下线通知）
 }

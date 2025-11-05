@@ -300,9 +300,41 @@
                   <div class="message-sender" v-if="chatType === 'group' && msg.fromUserId !== userStore.userId">
                     {{ getUserNickname(msg.fromUserId) }}
                   </div>
-                  <div class="message-content">
+                  
+                  <!-- 文字消息 -->
+                  <div v-if="!msg.messageType || msg.messageType <= 3" class="message-content">
                     {{ msg.content || msg.message }}
                   </div>
+                  
+                  <!-- 图片消息 -->
+                  <div v-else-if="msg.messageType === 4" class="message-image">
+                    <el-image
+                      :src="msg.content"
+                      :preview-src-list="[msg.content]"
+                      fit="cover"
+                      style="max-width: 300px; max-height: 300px; border-radius: 8px;"
+                      lazy
+                    >
+                      <template #error>
+                        <div class="image-error">
+                          <el-icon><Picture /></el-icon>
+                          <span>图片加载失败</span>
+                        </div>
+                      </template>
+                    </el-image>
+                  </div>
+                  
+                  <!-- 文件消息 -->
+                  <div v-else-if="msg.messageType === 5" class="message-file">
+                    <div class="file-card" @click="downloadFile(JSON.parse(msg.content).url)">
+                      <el-icon class="file-icon"><Folder /></el-icon>
+                      <div class="file-info">
+                        <div class="file-name">{{ JSON.parse(msg.content).name }}</div>
+                        <div class="file-size">{{ formatFileSize(JSON.parse(msg.content).size) }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div class="message-time">{{ formatTime(msg.createdAt) }}</div>
                 </div>
                 
@@ -342,19 +374,80 @@
           
           <!-- 输入框 -->
           <div class="message-input">
+            <!-- 隐藏的图片文件输入 -->
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleImageUpload"
+            />
+            
+            <!-- 隐藏的文件输入 -->
+            <input
+              ref="docInputRef"
+              type="file"
+              style="display: none"
+              @change="handleFileUpload"
+            />
+            
+            <div class="input-actions">
+              <el-button
+                :icon="Picture"
+                circle
+                @click="handleSelectImage"
+                :disabled="isUploading || isUploadingDoc"
+                title="发送图片"
+              />
+              <el-button
+                :icon="Folder"
+                circle
+                @click="handleSelectFile"
+                :disabled="isUploading || isUploadingDoc"
+                title="发送文件"
+              />
+              <el-button
+                :icon="Emoji"
+                circle
+                @click="showEmojiPicker = !showEmojiPicker"
+                title="选择表情"
+              />
+            </div>
+            
+            <!-- Emoji选择器 -->
+            <div v-if="showEmojiPicker" class="emoji-picker">
+              <div class="emoji-picker-header">
+                <span>选择表情</span>
+                <el-button text @click="showEmojiPicker = false">×</el-button>
+              </div>
+              <div class="emoji-grid">
+                <span 
+                  v-for="(emoji, index) in emojiList" 
+                  :key="index"
+                  class="emoji-item"
+                  @click="insertEmoji(emoji)"
+                  :title="emoji"
+                >
+                  {{ emoji }}
+                </span>
+              </div>
+            </div>
+            
             <el-input
               v-model="inputMessage"
               type="textarea"
               :rows="3"
               placeholder="输入消息（Enter 发送，Shift+Enter 换行）"
               @keydown.enter="handleEnterKey"
+              :disabled="isUploading || isUploadingDoc"
             />
             <el-button 
               type="primary" 
               @click="sendMessage"
-              :disabled="isSendDisabled"
+              :disabled="isSendDisabled || isUploading || isUploadingDoc"
+              :loading="isUploading || isUploadingDoc"
             >
-              发送 (Enter)
+              {{ isUploading || isUploadingDoc ? '上传中...' : '发送 (Enter)' }}
             </el-button>
           </div>
         </template>
@@ -481,20 +574,42 @@
         <el-form-item label="邮箱">
           <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
         </el-form-item>
-        <el-form-item label="选择头像颜色">
-          <div class="avatar-preview-section">
-            <!-- 预览当前头像 -->
-            <div class="profile-avatar-preview">
+        <el-form-item label="头像">
+          <!-- 隐藏的头像文件选择器 -->
+          <input
+            ref="avatarInputRef"
+            type="file"
+            accept="image/*"
+            style="display: none"
+            @change="handleAvatarUpload"
+          />
+          
+          <div class="avatar-upload-section">
+            <!-- 当前头像预览 -->
+            <div class="current-avatar-preview">
               <img 
-                v-if="profileForm.nickname && selectedProfileColor" 
-                :src="generateAvatarUrl(profileForm.nickname, selectedProfileColor)" 
-                alt="头像预览" 
+                :src="profileForm.avatar || generateAvatarUrl(profileForm.nickname, selectedProfileColor)" 
+                alt="当前头像" 
               />
-              <div v-else class="avatar-placeholder">
-                预览
-              </div>
             </div>
             
+            <!-- 上传按钮 -->
+            <div class="avatar-actions">
+              <el-button
+                :icon="Upload"
+                @click="handleSelectAvatar"
+                :loading="isUploadingAvatar"
+                :disabled="isUploadingAvatar"
+              >
+                {{ isUploadingAvatar ? '上传中...' : '上传头像' }}
+              </el-button>
+              <div class="upload-tip">支持 JPG、PNG，不超过2MB</div>
+            </div>
+          </div>
+        </el-form-item>
+        
+        <el-form-item label="或选择颜色">
+          <div class="avatar-preview-section">
             <!-- 颜色选择器 -->
             <div class="color-selector">
               <div 
@@ -510,8 +625,9 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item label="自定义头像URL">
-          <el-input v-model="customAvatarUrl" placeholder="可选：输入自定义头像URL" />
+        
+        <el-form-item label="或输入URL">
+          <el-input v-model="customAvatarUrl" placeholder="自定义头像URL" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -531,8 +647,12 @@
   import { wsClient } from '../api/websocket'
   import { logout as logoutApi, updateProfile as updateProfileApi } from '../api/auth'
   import { aiApi } from '../api/ai'
+  import { fileApi } from '../api/file'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Search, ArrowDown } from '@element-plus/icons-vue'
+  import { Search, ArrowDown, Picture, Upload, Folder } from '@element-plus/icons-vue'
+  import { IconsVue } from 'element-plus-x'
+  
+  const { Emoji } = IconsVue
   
   const router = useRouter()
   const userStore = useUserStore()
@@ -551,6 +671,29 @@
   const inputMessage = ref('')
   const messageListRef = ref(null)
   const userInfoCache = reactive({}) // userId -> UserInfo 缓存
+  
+  // Emoji表情
+  const showEmojiPicker = ref(false)
+  const emojiList = [
+    '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃',
+    '😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚',
+    '😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭',
+    '🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄',
+    '😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕',
+    '🤢','🤮','🤧','🥵','🥶','😶‍🌫️','😵','🤯','🤠','🥳',
+    '😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲',
+    '😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱',
+    '😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠',
+    '🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻',
+    '👽','👾','🤖','😺','😸','😹','😻','😼','😽','🙀',
+    '😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖',
+    '💗','💓','💞','💕','💟','❣️','💔','❤️','🧡','💛',
+    '💚','💙','💜','🤎','🖤','🤍','💯','💢','💥','💫',
+    '💦','💨','🕳️','💣','💬','👁️','🗨️','🗯️','💭','💤',
+    '👋','🤚','🖐️','✋','🖖','👌','🤏','✌️','🤞','🤟',
+    '🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎',
+    '✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏'
+  ]
   
   // 创建群组对话框
   const createGroupDialogVisible = ref(false)
@@ -596,6 +739,18 @@
   // AI助手相关
   const AI_ASSISTANT_ID = 'AI_ASSISTANT'
   const isAIThinking = ref(false)
+  
+  // 图片上传相关
+  const fileInputRef = ref(null)
+  const isUploading = ref(false)
+  
+  // 文件上传相关
+  const docInputRef = ref(null)
+  const isUploadingDoc = ref(false)
+  
+  // 头像上传相关
+  const avatarInputRef = ref(null)
+  const isUploadingAvatar = ref(false)
   
   // 当前聊天消息
   const currentMessages = computed(() => {
@@ -831,6 +986,261 @@
     sendMessage()
   }
   
+  // 插入emoji到输入框
+  const insertEmoji = (emoji) => {
+    inputMessage.value += emoji
+    showEmojiPicker.value = false
+  }
+  
+  // 触发文件选择
+  const handleSelectImage = () => {
+    fileInputRef.value.click()
+  }
+  
+  // 处理图片上传
+  const handleImageUpload = async (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      ElMessage.warning('请选择图片文件')
+      return
+    }
+    
+    // 验证文件大小（最大10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      ElMessage.warning('图片大小不能超过10MB')
+      return
+    }
+    
+    try {
+      isUploading.value = true
+      
+      // 上传图片到服务器（file.js 已经返回 URL 字符串）
+      const imageUrl = await fileApi.uploadFile(file, 'image')
+      
+      // 发送图片消息
+      await sendImageMessage(imageUrl)
+      
+      ElMessage.success('图片发送成功')
+    } catch (error) {
+      console.error('图片上传失败:', error)
+      ElMessage.error('图片上传失败：' + (error.message || '未知错误'))
+    } finally {
+      isUploading.value = false
+      // 清空文件选择
+      event.target.value = ''
+    }
+  }
+  
+  // 发送图片消息
+  const sendImageMessage = async (imageUrl) => {
+    const chatId = chatType.value === 'user' ? currentChatUser.value : currentChatGroup.value
+    if (!chatId) return
+    
+    let success = false
+    
+    // 发送私聊图片
+    if (chatType.value === 'user') {
+      success = wsClient.sendMessage(currentChatUser.value, imageUrl, 4) // messageType: 4 图片
+      
+      if (success) {
+        // 添加到本地消息列表
+        const msg = {
+          fromUserId: userStore.userId,
+          toUserId: currentChatUser.value,
+          content: imageUrl,
+          messageType: 4,
+          createdAt: new Date().toISOString()
+        }
+        
+        if (!messages[currentChatUser.value]) {
+          messages[currentChatUser.value] = []
+        }
+        messages[currentChatUser.value].push(msg)
+        
+        // 更新最近联系人列表
+        if (userInfoCache[currentChatUser.value]) {
+          const existingIndex = recentContacts.value.findIndex(u => u.userId === currentChatUser.value)
+          if (existingIndex === -1) {
+            recentContacts.value.unshift(userInfoCache[currentChatUser.value])
+          } else if (existingIndex > 0) {
+            const [existingUser] = recentContacts.value.splice(existingIndex, 1)
+            recentContacts.value.unshift(existingUser)
+          }
+        }
+      }
+    }
+    // 发送群聊图片
+    else if (chatType.value === 'group') {
+      success = wsClient.sendGroupMessage(currentChatGroup.value, imageUrl, 4) // messageType: 4 图片
+      
+      if (success) {
+        // 添加到本地消息列表
+        const msg = {
+          fromUserId: userStore.userId,
+          groupId: currentChatGroup.value,
+          content: imageUrl,
+          messageType: 4,
+          createdAt: new Date().toISOString()
+        }
+        
+        if (!messages[currentChatGroup.value]) {
+          messages[currentChatGroup.value] = []
+        }
+        messages[currentChatGroup.value].push(msg)
+        
+        // 更新最近群聊列表
+        const groupIndex = recentGroups.value.findIndex(g => g.groupId === currentChatGroup.value)
+        if (groupIndex > 0) {
+          const [group] = recentGroups.value.splice(groupIndex, 1)
+          recentGroups.value.unshift(group)
+        }
+      }
+    }
+    
+    if (success) {
+      // 滚动到底部
+      nextTick(() => scrollToBottom())
+    } else {
+      ElMessage.error('发送失败，请检查连接')
+    }
+  }
+  
+  // 触发文件选择
+  const handleSelectFile = () => {
+    docInputRef.value.click()
+  }
+  
+  // 处理文件上传
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    // 验证文件大小（最大50MB）
+    if (file.size > 50 * 1024 * 1024) {
+      ElMessage.warning('文件大小不能超过50MB')
+      return
+    }
+    
+    try {
+      isUploadingDoc.value = true
+      
+      // 上传文件到服务器
+      const fileUrl = await fileApi.uploadFile(file, 'file')
+      
+      console.log('文件上传成功:', fileUrl)
+      
+      // 发送文件消息（带文件名和大小）
+      const fileInfo = {
+        url: fileUrl,
+        name: file.name,
+        size: file.size
+      }
+      await sendFileMessage(fileInfo)
+      
+      ElMessage.success('文件发送成功')
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      ElMessage.error('文件上传失败：' + (error.message || '未知错误'))
+    } finally {
+      isUploadingDoc.value = false
+      // 清空文件选择
+      event.target.value = ''
+    }
+  }
+  
+  // 发送文件消息
+  const sendFileMessage = async (fileInfo) => {
+    const chatId = chatType.value === 'user' ? currentChatUser.value : currentChatGroup.value
+    if (!chatId) return
+    
+    // 将文件信息编码为 JSON 字符串
+    const content = JSON.stringify(fileInfo)
+    let success = false
+    
+    // 发送私聊文件
+    if (chatType.value === 'user') {
+      success = wsClient.sendMessage(currentChatUser.value, content, 5) // messageType: 5 文件
+      
+      if (success) {
+        // 添加到本地消息列表
+        const msg = {
+          fromUserId: userStore.userId,
+          toUserId: currentChatUser.value,
+          content: content,
+          messageType: 5,
+          createdAt: new Date().toISOString()
+        }
+        
+        if (!messages[currentChatUser.value]) {
+          messages[currentChatUser.value] = []
+        }
+        messages[currentChatUser.value].push(msg)
+        
+        // 更新最近联系人列表
+        if (userInfoCache[currentChatUser.value]) {
+          const existingIndex = recentContacts.value.findIndex(u => u.userId === currentChatUser.value)
+          if (existingIndex === -1) {
+            recentContacts.value.unshift(userInfoCache[currentChatUser.value])
+          } else if (existingIndex > 0) {
+            const [existingUser] = recentContacts.value.splice(existingIndex, 1)
+            recentContacts.value.unshift(existingUser)
+          }
+        }
+      }
+    }
+    // 发送群聊文件
+    else if (chatType.value === 'group') {
+      success = wsClient.sendGroupMessage(currentChatGroup.value, content, 5) // messageType: 5 文件
+      
+      if (success) {
+        // 添加到本地消息列表
+        const msg = {
+          fromUserId: userStore.userId,
+          groupId: currentChatGroup.value,
+          content: content,
+          messageType: 5,
+          createdAt: new Date().toISOString()
+        }
+        
+        if (!messages[currentChatGroup.value]) {
+          messages[currentChatGroup.value] = []
+        }
+        messages[currentChatGroup.value].push(msg)
+        
+        // 更新最近群聊列表
+        const groupIndex = recentGroups.value.findIndex(g => g.groupId === currentChatGroup.value)
+        if (groupIndex > 0) {
+          const [group] = recentGroups.value.splice(groupIndex, 1)
+          recentGroups.value.unshift(group)
+        }
+      }
+    }
+    
+    if (success) {
+      // 滚动到底部
+      nextTick(() => scrollToBottom())
+    } else {
+      ElMessage.error('发送失败，请检查连接')
+    }
+  }
+  
+  // 格式化文件大小
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+  
+  // 下载文件
+  const downloadFile = (url) => {
+    window.open(url, '_blank')
+  }
+  
   // 发送消息
   const sendMessage = async () => {
     if (!inputMessage.value.trim()) return
@@ -1019,7 +1429,8 @@
       // 添加消息
       messages[fromUser].push({
         ...message,
-        content: message.message
+        content: message.message,
+        messageType: message.messageType || 1  // 保留 messageType 字段
       })
       
       // 如果不是当前聊天用户，增加未读数量
@@ -1063,6 +1474,7 @@
         fromUserId: message.fromUserId,
         groupId: message.groupId,
         content: message.message,  // WebSocket 的 message 字段映射为 content
+        messageType: message.messageType || 2,  // 保留 messageType 字段
         createdAt: new Date().toISOString()
       })
       
@@ -1262,6 +1674,49 @@
     }
   })
   
+  // 触发头像选择
+  const handleSelectAvatar = () => {
+    avatarInputRef.value.click()
+  }
+  
+  // 处理头像上传
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      ElMessage.warning('请选择图片文件')
+      return
+    }
+    
+    // 验证文件大小（最大2MB）
+    if (file.size > 2 * 1024 * 1024) {
+      ElMessage.warning('头像大小不能超过2MB')
+      return
+    }
+    
+    try {
+      isUploadingAvatar.value = true
+      
+      // 上传头像到服务器（file.js 已经返回 URL 字符串）
+      const avatarUrl = await fileApi.uploadFile(file, 'avatar')
+      
+      // 更新表单中的头像
+      profileForm.avatar = avatarUrl
+      customAvatarUrl.value = '' // 清空自定义URL
+      
+      ElMessage.success('头像上传成功')
+    } catch (error) {
+      console.error('头像上传失败:', error)
+      ElMessage.error('头像上传失败：' + (error.message || '未知错误'))
+    } finally {
+      isUploadingAvatar.value = false
+      // 清空文件选择
+      event.target.value = ''
+    }
+  }
+  
   // 更新个人资料
   const handleUpdateProfile = async () => {
     if (!profileForm.nickname.trim()) {
@@ -1270,10 +1725,15 @@
     }
     
     try {
-      // 优先使用自定义头像URL，否则使用颜色方案生成的头像
-      const finalAvatar = customAvatarUrl.value.trim() 
-        ? customAvatarUrl.value.trim() 
-        : generateAvatarUrl(profileForm.nickname, selectedProfileColor.value)
+      // 优先使用当前头像（可能是上传的），其次自定义URL，最后使用颜色方案生成
+      let finalAvatar = profileForm.avatar
+      
+      if (customAvatarUrl.value.trim()) {
+        finalAvatar = customAvatarUrl.value.trim()
+      } else if (!profileForm.avatar || profileForm.avatar.includes('ui-avatars.com')) {
+        // 如果当前头像是UI Avatars生成的，重新生成
+        finalAvatar = generateAvatarUrl(profileForm.nickname, selectedProfileColor.value)
+      }
       
       const response = await updateProfileApi({
         userId: profileForm.userId,
@@ -1790,6 +2250,40 @@
   gap: 20px;
 }
 
+/* 头像上传区域 */
+.avatar-upload-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.current-avatar-preview {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #409eff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.current-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-tip {
+  font-size: 12px;
+  color: #909399;
+}
+
 .avatar-placeholder {
   width: 100%;
   height: 100%;
@@ -2156,10 +2650,156 @@
     border-top: 1px solid #e4e7ed;
     display: flex;
     gap: 10px;
+    align-items: flex-start;
+    position: relative;
+  }
+  
+  .input-actions {
+    display: flex;
+    gap: 5px;
   }
   
   .message-input :deep(.el-textarea) {
     flex: 1;
+  }
+  
+  /* Emoji选择器样式 */
+  .emoji-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 20px;
+    margin-bottom: 10px;
+    width: 340px;
+    max-height: 380px;
+    background: white;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+  }
+  
+  .emoji-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e4e7ed;
+    font-weight: 500;
+    font-size: 14px;
+    color: #303133;
+  }
+  
+  .emoji-picker-header .el-button {
+    font-size: 20px;
+    color: #909399;
+    padding: 0;
+  }
+  
+  .emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 36px);
+    gap: 8px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    justify-content: center;
+  }
+  
+  .emoji-item {
+    font-size: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  
+  .emoji-item:hover {
+    background: #f0f2f5;
+    transform: scale(1.15);
+  }
+  
+  /* 图片消息样式 */
+  .message-image {
+    cursor: pointer;
+  }
+  
+  /* 文件消息样式 */
+  .message-file {
+    width: 100%;
+  }
+  
+  .file-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #f5f7fa;
+    border: 1px solid #e4e7ed;
+    border-radius: 10px;
+    transition: all 0.3s;
+    cursor: pointer;
+    user-select: none;
+    min-width: 280px;
+    max-width: 400px;
+  }
+  
+  .file-card:hover {
+    background: #ecf5ff;
+    border-color: #409eff;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+  }
+  
+  .file-card:active {
+    transform: translateY(0);
+  }
+  
+  .file-icon {
+    font-size: 36px;
+    color: #409eff;
+    flex-shrink: 0;
+  }
+  
+  .file-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .file-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: #303133;
+    word-break: break-all;
+    margin-bottom: 5px;
+  }
+  
+  .file-size {
+    font-size: 13px;
+    color: #909399;
+  }
+  .message-image {
+    cursor: pointer;
+  }
+  
+  .image-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: #f5f7fa;
+    border-radius: 8px;
+    color: #909399;
+  }
+  
+  .image-error .el-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
   }
   
   /* 搜索结果面板 */

@@ -110,7 +110,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .toUserId(chatMessage.getToUserId())
                 .content(chatMessage.getMessage())
                 .messageId(UUID.randomUUID().toString())
-                .messageType(1)  // 1-私聊
+                .messageType(chatMessage.getMessageType() != null ? chatMessage.getMessageType() : 1)  // 使用传入的 messageType，默认 1-文字
                 .status(0)
                 .groupId(null)
                 .createdAt(LocalDateTime.now())
@@ -154,7 +154,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 .toUserId(null)  // 群聊时 toUserId 为空
                 .content(chatMessage.getMessage())
                 .messageId(UUID.randomUUID().toString())
-                .messageType(2)  // 2-群聊
+                .messageType(chatMessage.getMessageType() != null ? chatMessage.getMessageType() : 2)  // 使用传入的 messageType，默认 2-群聊文字
                 .status(0)
                 .groupId(groupId)
                 .createdAt(LocalDateTime.now())
