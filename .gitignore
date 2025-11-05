@@ -61,5 +61,6 @@ build/
 ### Docker & Environment ###
 .env
 *.tar.gz
+deploy/
 frontend/node_modules/
 frontend/dist/
