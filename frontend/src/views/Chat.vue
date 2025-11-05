@@ -864,6 +864,19 @@
           messages[currentChatUser.value] = []
         }
         messages[currentChatUser.value].push(msg)
+        
+        // 更新最近联系人列表（将当前聊天用户移到最前面）
+        if (userInfoCache[currentChatUser.value]) {
+          const existingIndex = recentContacts.value.findIndex(u => u.userId === currentChatUser.value)
+          if (existingIndex === -1) {
+            // 不存在，添加到最前面
+            recentContacts.value.unshift(userInfoCache[currentChatUser.value])
+          } else if (existingIndex > 0) {
+            // 如果已存在但不在第一位，移到最前面
+            const [existingUser] = recentContacts.value.splice(existingIndex, 1)
+            recentContacts.value.unshift(existingUser)
+          }
+        }
       }
     }
     // 发送群聊消息
@@ -972,10 +985,30 @@
           const users = response.data || []
           users.forEach(user => {
             userInfoCache[user.userId] = user
+            
+            // 加载完用户信息后，更新最近联系人列表
+            const existingIndex = recentContacts.value.findIndex(u => u.userId === user.userId)
+            if (existingIndex === -1) {
+              recentContacts.value.unshift(user)
+            } else {
+              // 如果已存在，移到最前面
+              const [existingUser] = recentContacts.value.splice(existingIndex, 1)
+              recentContacts.value.unshift(existingUser)
+            }
           })
         }).catch(error => {
           console.error('加载发送者信息失败:', error)
         })
+      } else if (userInfoCache[fromUser]) {
+        // 如果缓存中有发送者信息，直接更新最近联系人列表
+        const existingIndex = recentContacts.value.findIndex(u => u.userId === fromUser)
+        if (existingIndex === -1) {
+          recentContacts.value.unshift(userInfoCache[fromUser])
+        } else if (existingIndex > 0) {
+          // 如果已存在但不在第一位，移到最前面
+          const [existingUser] = recentContacts.value.splice(existingIndex, 1)
+          recentContacts.value.unshift(existingUser)
+        }
       }
       
       // 初始化消息数组
@@ -988,11 +1021,6 @@
         ...message,
         content: message.message
       })
-      
-      // 更新最近联系人列表
-      if (!recentContacts.value.includes(fromUser)) {
-        recentContacts.value.unshift(fromUser)
-      }
       
       // 如果不是当前聊天用户，增加未读数量
       if (chatType.value !== 'user' || fromUser !== currentChatUser.value) {

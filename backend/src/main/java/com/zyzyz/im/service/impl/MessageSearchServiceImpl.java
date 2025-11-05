@@ -101,19 +101,73 @@ public class MessageSearchServiceImpl implements MessageSearchService {
     
     @Override
     public List<MessageDocument> searchAll(String userId, String keyword) {
-        // 搜索该用户所有相关消息（使用 match 查询，利用 IK 分词）
-        Query query = Query.of(q -> q.match(m -> m
-                .field("content")
-                .query(keyword)
+        // 搜索该用户所有相关消息（包括私聊、群聊、AI对话）
+        // 使用 bool 查询：支持模糊匹配、通配符、精确匹配
+        Query query = Query.of(q -> q.bool(b -> b
+                // 内容匹配：使用多种匹配方式
+                .must(m -> m.bool(mb -> mb
+                        // 1. IK 分词的 match 查询（适合中文）
+                        .should(s -> s.match(mt -> mt
+                                .field("content")
+                                .query(keyword)
+                        ))
+                        // 2. wildcard 通配符查询（适合英文和短词）
+                        .should(s -> s.wildcard(w -> w
+                                .field("content")
+                                .value("*" + keyword.toLowerCase() + "*")
+                        ))
+                        // 3. match_phrase 短语匹配（精确匹配）
+                        .should(s -> s.matchPhrase(mp -> mp
+                                .field("content")
+                                .query(keyword)
+                        ))
+                        .minimumShouldMatch("1")  // 至少匹配一种方式
+                ))
+                // 用户过滤：发送者或接收者
+                .should(s -> s.term(t -> t
+                        .field("fromUserId")
+                        .value(userId)
+                ))
+                .should(s -> s.term(t -> t
+                        .field("toUserId")
+                        .value(userId)
+                ))
+                .minimumShouldMatch("1")  // 至少匹配一个 should 条件（发送者或接收者）
         ));
         
         NativeQuery nativeQuery = NativeQuery.builder()
                 .withQuery(query)
+                .withMaxResults(100)  // 限制最多返回100条结果
                 .build();
         
-        return elasticsearchOperations.search(nativeQuery, MessageDocument.class).stream()
+        System.out.println("🔍 执行搜索查询 - userId: " + userId + ", keyword: " + keyword);
+        
+        SearchHits<MessageDocument> hits = elasticsearchOperations.search(nativeQuery, MessageDocument.class);
+        List<MessageDocument> results = hits.stream()
                 .map(SearchHit::getContent)
                 .collect(Collectors.toList());
+        
+        System.out.println("📊 ES 返回结果数: " + results.size());
+        
+        // 打印前3条结果作为调试
+        if (results.isEmpty()) {
+            System.out.println("⚠️ 未找到任何结果，可能原因：");
+            System.out.println("   1. ES 索引中没有数据");
+            System.out.println("   2. 用户 " + userId + " 没有相关消息");
+            System.out.println("   3. 关键词 '" + keyword + "' 不匹配任何内容");
+        } else {
+            System.out.println("📝 前3条结果示例：");
+            for (int i = 0; i < Math.min(3, results.size()); i++) {
+                MessageDocument doc = results.get(i);
+                String preview = doc.getContent() != null && doc.getContent().length() > 30
+                        ? doc.getContent().substring(0, 30) + "..."
+                        : doc.getContent();
+                System.out.println("   [" + (i + 1) + "] from=" + doc.getFromUserId() + 
+                                 ", content=" + preview);
+            }
+        }
+        
+        return results;
     }   
     
     /**
