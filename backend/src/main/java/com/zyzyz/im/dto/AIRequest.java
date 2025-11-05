@@ -27,5 +27,15 @@ public class AIRequest {
      * 是否清空对话历史
      */
     private Boolean clearHistory;
+    
+    /**
+     * 图片URL（可选，用于图文对话）
+     */
+    private String imageUrl;
+    
+    /**
+     * 文档ID（可选，用于文档对话，通义千问的file_id）
+     */
+    private String fileId;
 }
 

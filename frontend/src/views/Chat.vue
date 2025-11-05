@@ -230,6 +230,22 @@
             <div class="chat-header-actions">
               <!-- AI对话特有的按钮 -->
               <template v-if="chatType === 'user' && currentChatUser === AI_ASSISTANT_ID">
+                <el-button 
+                  size="small" 
+                  type="success"
+                  :icon="Picture"
+                  @click="showImageUploadDialog = true"
+                >
+                  发图片
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="warning"
+                  :icon="Folder"
+                  @click="showDocumentUploadDialog = true"
+                >
+                  发文档
+                </el-button>
                 <el-dropdown @command="handleAIAction">
                   <el-button size="small" type="primary">
                     对话管理<el-icon class="el-icon--right"><arrow-down /></el-icon>
@@ -301,8 +317,49 @@
                     {{ getUserNickname(msg.fromUserId) }}
                   </div>
                   
-                  <!-- 文字消息 -->
-                  <div v-if="!msg.messageType || msg.messageType <= 3" class="message-content">
+                  <!-- 文档消息（AI对话中的文档+文字）-->
+                  <div v-if="msg.isDocumentMessage || (msg.content && msg.content.startsWith('{') && msg.content.includes('fileId'))" class="message-document">
+                    <template v-if="parseDocumentMessage(msg.content)">
+                      <div class="document-card">
+                        <el-icon class="doc-icon" :size="32"><Document /></el-icon>
+                        <div class="doc-info">
+                          <div class="doc-filename">{{ parseDocumentMessage(msg.content).fileName }}</div>
+                          <div class="doc-id">ID: {{ parseDocumentMessage(msg.content).fileId.substring(0, 20) }}...</div>
+                        </div>
+                      </div>
+                      <div class="message-content" style="margin-top: 10px;">
+                        {{ parseDocumentMessage(msg.content).text }}
+                      </div>
+                    </template>
+                  </div>
+                  
+                  <!-- 图文消息（AI对话中的图片+文字）-->
+                  <div v-else-if="msg.isImageMessage || (msg.content && msg.content.startsWith('{') && msg.content.includes('imageUrl'))" class="message-image-text">
+                    <template v-if="parseImageMessage(msg.content)">
+                      <div class="message-image">
+                        <el-image
+                          :src="parseImageMessage(msg.content).imageUrl"
+                          :preview-src-list="[parseImageMessage(msg.content).imageUrl]"
+                          fit="cover"
+                          style="max-width: 300px; max-height: 300px; border-radius: 8px;"
+                          lazy
+                        >
+                          <template #error>
+                            <div class="image-error">
+                              <el-icon><Picture /></el-icon>
+                              <span>图片加载失败</span>
+                            </div>
+                          </template>
+                        </el-image>
+                      </div>
+                      <div class="message-content" style="margin-top: 8px;">
+                        {{ parseImageMessage(msg.content).text }}
+                      </div>
+                    </template>
+                  </div>
+                  
+                  <!-- 普通文字消息 -->
+                  <div v-else-if="!msg.messageType || msg.messageType <= 3" class="message-content">
                     {{ msg.content || msg.message }}
                   </div>
                   
@@ -557,6 +614,129 @@
       </div>
     </el-dialog>
     
+    <!-- 发送文档给AI对话框 -->
+    <el-dialog 
+      v-model="showDocumentUploadDialog" 
+      title="发送文档给AI分析" 
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <div class="document-upload-section">
+        <!-- 文档信息显示 -->
+        <div v-if="selectedDocumentForAI" class="document-info">
+          <el-icon :size="48"><Document /></el-icon>
+          <div class="doc-details">
+            <div class="doc-name">{{ selectedDocumentForAI.name }}</div>
+            <div class="doc-size">{{ formatFileSize(selectedDocumentForAI.size) }}</div>
+          </div>
+        </div>
+        <div v-else class="document-placeholder">
+          <el-icon :size="60"><Document /></el-icon>
+          <p>请选择文档文件</p>
+          <p class="supported-formats">支持：PDF、Word、Excel、TXT、Markdown</p>
+        </div>
+        
+        <!-- 隐藏的文件输入 -->
+        <input
+          ref="aiDocInputRef"
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.epub,.mobi"
+          style="display: none"
+          @change="handleAIDocumentSelect"
+        />
+        
+        <!-- 选择文档按钮 -->
+        <el-button 
+          type="primary" 
+          :icon="Upload"
+          @click="aiDocInputRef.click()"
+          style="margin-top: 15px; width: 100%"
+        >
+          选择文档
+        </el-button>
+        
+        <!-- 问题输入 -->
+        <el-input
+          v-model="documentQuestion"
+          type="textarea"
+          :rows="3"
+          placeholder="问AI关于这个文档的问题，例如：这篇文章讲了什么？帮我总结一下..."
+          style="margin-top: 15px"
+        />
+      </div>
+      
+      <template #footer>
+        <el-button @click="cancelDocumentUpload">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="sendDocumentToAI"
+          :loading="isSendingDocToAI"
+          :disabled="!selectedDocumentForAI || !documentQuestion.trim()"
+        >
+          {{ isSendingDocToAI ? '发送中...' : '发送给AI' }}
+        </el-button>
+      </template>
+    </el-dialog>
+    
+    <!-- 发送图片给AI对话框 -->
+    <el-dialog 
+      v-model="showImageUploadDialog" 
+      title="发送图片给AI分析" 
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <div class="image-upload-section">
+        <!-- 图片预览区 -->
+        <div v-if="selectedImageForAI" class="image-preview">
+          <img :src="selectedImagePreview" alt="预览" />
+        </div>
+        <div v-else class="image-placeholder">
+          <el-icon :size="60"><Picture /></el-icon>
+          <p>请选择图片</p>
+        </div>
+        
+        <!-- 隐藏的文件输入 -->
+        <input
+          ref="aiImageInputRef"
+          type="file"
+          accept="image/*"
+          style="display: none"
+          @change="handleAIImageSelect"
+        />
+        
+        <!-- 选择图片按钮 -->
+        <el-button 
+          type="primary" 
+          :icon="Upload"
+          @click="aiImageInputRef.click()"
+          style="margin-top: 15px; width: 100%"
+        >
+          选择图片
+        </el-button>
+        
+        <!-- 问题输入 -->
+        <el-input
+          v-model="imageQuestion"
+          type="textarea"
+          :rows="3"
+          placeholder="问AI关于这张图片的问题，例如：这是什么？帮我分析一下这张图..."
+          style="margin-top: 15px"
+        />
+      </div>
+      
+      <template #footer>
+        <el-button @click="cancelImageUpload">取消</el-button>
+        <el-button 
+          type="primary" 
+          @click="sendImageToAI"
+          :loading="isSendingImageToAI"
+          :disabled="!selectedImageForAI || !imageQuestion.trim()"
+        >
+          {{ isSendingImageToAI ? '发送中...' : '发送给AI' }}
+        </el-button>
+      </template>
+    </el-dialog>
+    
     <!-- 编辑个人资料对话框 -->
     <el-dialog 
       v-model="showProfileDialog" 
@@ -648,9 +828,9 @@
   import { logout as logoutApi, updateProfile as updateProfileApi } from '../api/auth'
   import { aiApi } from '../api/ai'
   import { fileApi } from '../api/file'
-  import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Search, ArrowDown, Picture, Upload, Folder } from '@element-plus/icons-vue'
-  import { IconsVue } from 'element-plus-x'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, ArrowDown, Picture, Upload, Folder, Document } from '@element-plus/icons-vue'
+import { IconsVue } from 'element-plus-x'
   
   const { Emoji } = IconsVue
   
@@ -748,9 +928,24 @@
   const docInputRef = ref(null)
   const isUploadingDoc = ref(false)
   
-  // 头像上传相关
-  const avatarInputRef = ref(null)
-  const isUploadingAvatar = ref(false)
+// 头像上传相关
+const avatarInputRef = ref(null)
+const isUploadingAvatar = ref(false)
+
+// AI图片上传相关
+const showImageUploadDialog = ref(false)
+const aiImageInputRef = ref(null)
+const selectedImageForAI = ref(null)
+const selectedImagePreview = ref('')
+const imageQuestion = ref('')
+const isSendingImageToAI = ref(false)
+
+// AI文档上传相关
+const showDocumentUploadDialog = ref(false)
+const aiDocInputRef = ref(null)
+const selectedDocumentForAI = ref(null)
+const documentQuestion = ref('')
+const isSendingDocToAI = ref(false)
   
   // 当前聊天消息
   const currentMessages = computed(() => {
@@ -1118,6 +1313,35 @@
     const file = event.target.files[0]
     if (!file) return
     
+    // 🎯 智能识别：如果是图片，自动当作图片发送
+    if (file.type.startsWith('image/')) {
+      // 验证图片大小（最大10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        ElMessage.warning('图片大小不能超过10MB')
+        return
+      }
+      
+      try {
+        isUploadingDoc.value = true
+        
+        // 上传图片
+        const imageUrl = await fileApi.uploadFile(file, 'image')
+        
+        // 发送图片消息
+        await sendImageMessage(imageUrl)
+        
+        ElMessage.success('图片发送成功')
+      } catch (error) {
+        console.error('图片上传失败:', error)
+        ElMessage.error('图片上传失败：' + (error.message || '未知错误'))
+      } finally {
+        isUploadingDoc.value = false
+        event.target.value = ''
+      }
+      return
+    }
+    
+    // 非图片文件：正常文件上传流程
     // 验证文件大小（最大50MB）
     if (file.size > 50 * 1024 * 1024) {
       ElMessage.warning('文件大小不能超过50MB')
@@ -2150,6 +2374,261 @@
     const group = groupList.value.find(g => g.groupId === currentChatGroup.value)
     return group && group.creatorId === userId
   }
+  
+  // 解析图文消息
+  const parseImageMessage = (content) => {
+    if (!content) return null
+    try {
+      const parsed = JSON.parse(content)
+      if (parsed.text && parsed.imageUrl) {
+        return parsed
+      }
+      return null
+    } catch (e) {
+      return null
+    }
+  }
+  
+  // 解析文档消息
+  const parseDocumentMessage = (content) => {
+    if (!content) return null
+    try {
+      const parsed = JSON.parse(content)
+      if (parsed.text && parsed.fileName && parsed.fileId) {
+        return parsed
+      }
+      return null
+    } catch (e) {
+      return null
+    }
+  }
+  
+  // 处理AI图片选择
+  const handleAIImageSelect = (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      ElMessage.warning('请选择图片文件')
+      return
+    }
+    
+    // 验证文件大小（最大10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      ElMessage.warning('图片大小不能超过10MB')
+      return
+    }
+    
+    // 保存文件并生成预览
+    selectedImageForAI.value = file
+    selectedImagePreview.value = URL.createObjectURL(file)
+  }
+  
+  // 取消图片上传
+  const cancelImageUpload = () => {
+    showImageUploadDialog.value = false
+    selectedImageForAI.value = null
+    selectedImagePreview.value = ''
+    imageQuestion.value = ''
+    
+    // 清空文件输入
+    if (aiImageInputRef.value) {
+      aiImageInputRef.value.value = ''
+    }
+  }
+  
+  // 处理AI文档选择
+  const handleAIDocumentSelect = (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    // 验证文件大小（最大50MB）
+    if (file.size > 50 * 1024 * 1024) {
+      ElMessage.warning('文档大小不能超过50MB')
+      return
+    }
+    
+    selectedDocumentForAI.value = file
+  }
+  
+  // 取消文档上传
+  const cancelDocumentUpload = () => {
+    showDocumentUploadDialog.value = false
+    selectedDocumentForAI.value = null
+    documentQuestion.value = ''
+    
+    // 清空文件输入
+    if (aiDocInputRef.value) {
+      aiDocInputRef.value.value = ''
+    }
+  }
+  
+  // 发送文档给AI
+  const sendDocumentToAI = async () => {
+    if (!selectedDocumentForAI.value || !documentQuestion.value.trim()) {
+      ElMessage.warning('请选择文档并输入问题')
+      return
+    }
+    
+    try {
+      isSendingDocToAI.value = true
+      
+      // 1. 上传文档到通义千问，获取file_id
+      ElMessage.info('正在上传文档...')
+      const fileId = await aiApi.uploadDocument(selectedDocumentForAI.value)
+      console.log('文档上传成功，file_id:', fileId)
+      
+      // 2. 添加用户消息到聊天列表（文档消息）
+      const userMsg = {
+        fromUserId: userStore.userId,
+        toUserId: AI_ASSISTANT_ID,
+        content: JSON.stringify({
+          text: documentQuestion.value,
+          fileName: selectedDocumentForAI.value.name,
+          fileId: fileId
+        }),
+        createdAt: new Date().toISOString(),
+        isDocumentMessage: true  // 标记为文档消息
+      }
+      
+      if (!messages[AI_ASSISTANT_ID]) {
+        messages[AI_ASSISTANT_ID] = []
+      }
+      messages[AI_ASSISTANT_ID].push(userMsg)
+      
+      // 3. 关闭对话框
+      showDocumentUploadDialog.value = false
+      
+      // 4. 显示AI正在思考
+      isAIThinking.value = true
+      
+      // 5. 滚动到底部
+      await nextTick()
+      scrollToBottom()
+      
+      // 6. 调用AI文档对话API
+      ElMessage.info('AI正在分析文档...')
+      const response = await aiApi.chatWithDocument(
+        userStore.userId,
+        documentQuestion.value,
+        fileId
+      )
+      
+      // 7. 添加AI回复到消息列表
+      const aiMsg = {
+        fromUserId: AI_ASSISTANT_ID,
+        toUserId: userStore.userId,
+        content: response.data.reply,
+        createdAt: new Date().toISOString()
+      }
+      
+      messages[AI_ASSISTANT_ID].push(aiMsg)
+      
+      // 8. 清空表单
+      selectedDocumentForAI.value = null
+      documentQuestion.value = ''
+      
+      if (aiDocInputRef.value) {
+        aiDocInputRef.value.value = ''
+      }
+      
+      ElMessage.success('AI已回复')
+      
+      // 9. 滚动到底部
+      await nextTick()
+      scrollToBottom()
+      
+    } catch (error) {
+      console.error('发送失败:', error)
+      ElMessage.error('发送失败：' + (error.message || '未知错误'))
+    } finally {
+      isAIThinking.value = false
+      isSendingDocToAI.value = false
+    }
+  }
+  
+  // 发送图片给AI
+  const sendImageToAI = async () => {
+    if (!selectedImageForAI.value || !imageQuestion.value.trim()) {
+      ElMessage.warning('请选择图片并输入问题')
+      return
+    }
+    
+    try {
+      isSendingImageToAI.value = true
+      
+      // 1. 上传图片到服务器
+      const imageUrl = await fileApi.uploadFile(selectedImageForAI.value, 'image')
+      console.log('图片上传成功:', imageUrl)
+      
+      // 2. 添加用户消息到聊天列表（图文消息）
+      const userMsg = {
+        fromUserId: userStore.userId,
+        toUserId: AI_ASSISTANT_ID,
+        content: JSON.stringify({
+          text: imageQuestion.value,
+          imageUrl: imageUrl
+        }),
+        createdAt: new Date().toISOString(),
+        isImageMessage: true  // 标记为图文消息
+      }
+      
+      if (!messages[AI_ASSISTANT_ID]) {
+        messages[AI_ASSISTANT_ID] = []
+      }
+      messages[AI_ASSISTANT_ID].push(userMsg)
+      
+      // 3. 关闭对话框
+      showImageUploadDialog.value = false
+      
+      // 4. 显示AI正在思考
+      isAIThinking.value = true
+      
+      // 5. 滚动到底部
+      await nextTick()
+      scrollToBottom()
+      
+      // 6. 调用AI图文对话API
+      const response = await aiApi.chatWithImage(
+        userStore.userId,
+        imageQuestion.value,
+        imageUrl
+      )
+      
+      // 7. 添加AI回复到消息列表
+      const aiMsg = {
+        fromUserId: AI_ASSISTANT_ID,
+        toUserId: userStore.userId,
+        content: response.data.reply,
+        createdAt: new Date().toISOString()
+      }
+      
+      messages[AI_ASSISTANT_ID].push(aiMsg)
+      
+      // 8. 清空表单
+      selectedImageForAI.value = null
+      selectedImagePreview.value = ''
+      imageQuestion.value = ''
+      
+      if (aiImageInputRef.value) {
+        aiImageInputRef.value.value = ''
+      }
+      
+      ElMessage.success('AI已回复')
+      
+      // 9. 滚动到底部
+      await nextTick()
+      scrollToBottom()
+      
+    } catch (error) {
+      console.error('发送失败:', error)
+      ElMessage.error('发送失败：' + (error.message || '未知错误'))
+    } finally {
+      isAIThinking.value = false
+      isSendingImageToAI.value = false
+    }
+  }
   </script>
   
   <style scoped>
@@ -3004,5 +3483,149 @@
     font-size: 14px;
     font-weight: 500;
     color: #303133;
+  }
+  
+  /* AI图片上传对话框样式 */
+  .image-upload-section {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .image-preview {
+    width: 100%;
+    max-height: 300px;
+    border: 2px solid #e4e7ed;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f7fa;
+  }
+  
+  .image-preview img {
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+  }
+  
+  .image-placeholder {
+    width: 100%;
+    height: 200px;
+    border: 2px dashed #dcdfe6;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    color: #909399;
+  }
+  
+  .image-placeholder p {
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  
+  /* 图文消息样式 */
+  .message-image-text {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* AI文档上传对话框样式 */
+  .document-upload-section {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .document-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    background: #f5f7fa;
+    border: 2px solid #e4e7ed;
+    border-radius: 8px;
+  }
+  
+  .doc-details {
+    flex: 1;
+  }
+  
+  .doc-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: #303133;
+    margin-bottom: 5px;
+    word-break: break-all;
+  }
+  
+  .doc-size {
+    font-size: 13px;
+    color: #909399;
+  }
+  
+  .document-placeholder {
+    width: 100%;
+    height: 200px;
+    border: 2px dashed #dcdfe6;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    color: #909399;
+  }
+  
+  .document-placeholder p {
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  
+  .supported-formats {
+    font-size: 12px !important;
+    color: #c0c4cc !important;
+  }
+  
+  /* 文档消息样式 */
+  .message-document {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .document-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f5f7fa;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+  }
+  
+  .doc-icon {
+    color: #409eff;
+    flex-shrink: 0;
+  }
+  
+  .doc-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .doc-filename {
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+  
+  .doc-id {
+    font-size: 12px;
+    color: #909399;
+    font-family: monospace;
   }
   </style>

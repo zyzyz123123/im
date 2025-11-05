@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.zyzyz.im.common.Result;
 import com.zyzyz.im.dto.AIRequest;
@@ -102,6 +103,64 @@ public class AIController {
         // 查询与AI的对话历史 (messageType = 3)
         List<Message> messages = messageService.selectByUsers(userId, "AI_ASSISTANT");
         return Result.success(messages);
+    }
+    
+    /**
+     * 与AI进行图文对话
+     */
+    @PostMapping("/chat-with-image")
+    public Result<AIResponse> chatWithImage(@RequestBody AIRequest request) {
+        log.info("收到AI图文对话请求，用户：{}，消息：{}，图片：{}", 
+                 request.getUserId(), request.getMessage(), request.getImageUrl());
+        
+        if (request.getImageUrl() == null || request.getImageUrl().trim().isEmpty()) {
+            return Result.error("图片URL不能为空");
+        }
+        
+        AIResponse response = aiService.chatWithImage(
+            request.getUserId(), 
+            request.getMessage(), 
+            request.getImageUrl()
+        );
+        return Result.success(response);
+    }
+    
+    /**
+     * 上传文档到通义千问，获取file_id
+     */
+    @PostMapping("/upload-document")
+    public Result<String> uploadDocument(@RequestParam("file") MultipartFile file) {
+        log.info("收到文档上传请求，文件名：{}，大小：{}", file.getOriginalFilename(), file.getSize());
+        
+        try {
+            byte[] fileBytes = file.getBytes();
+            String fileId = aiService.uploadDocument(fileBytes, file.getOriginalFilename());
+            log.info("文档上传成功，file_id：{}", fileId);
+            return Result.success(fileId);
+        } catch (Exception e) {
+            log.error("文档上传失败：{}", e.getMessage(), e);
+            return Result.error("文档上传失败：" + e.getMessage());
+        }
+    }
+    
+    /**
+     * 与AI进行文档对话
+     */
+    @PostMapping("/chat-with-document")
+    public Result<AIResponse> chatWithDocument(@RequestBody AIRequest request) {
+        log.info("收到AI文档对话请求，用户：{}，消息：{}，fileId：{}", 
+                 request.getUserId(), request.getMessage(), request.getFileId());
+        
+        if (request.getFileId() == null || request.getFileId().trim().isEmpty()) {
+            return Result.error("文档ID不能为空");
+        }
+        
+        AIResponse response = aiService.chatWithDocument(
+            request.getUserId(), 
+            request.getMessage(), 
+            request.getFileId()
+        );
+        return Result.success(response);
     }
 }
 

@@ -1,7 +1,14 @@
 package com.zyzyz.im.service.impl;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,12 +18,15 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,6 +55,15 @@ public class AIServiceImpl implements AIService {
     
     @Value("${ai.model:qwen-plus}")
     private String model;
+    
+    @Value("${ai.visionModel:qwen-vl-max}")
+    private String visionModel;
+    
+    @Value("${ai.documentModel:qwen-long}")
+    private String documentModel;
+    
+    @Value("${ai.fileUploadUrl:https://dashscope.aliyuncs.com/compatible-mode/v1/files}")
+    private String fileUploadUrl;
     
     @Value("${ai.maxHistory:10}")
     private Integer maxHistory;
@@ -208,6 +227,357 @@ public class AIServiceImpl implements AIService {
         } catch (Exception e) {
             // 数据库保存失败不影响主流程
             log.error("保存AI对话到数据库失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public AIResponse chatWithImage(String userId, String message, String imageUrl) {
+        try {
+            log.info("开始图文对话，用户：{}，消息：{}，图片：{}", userId, message, imageUrl);
+            
+            // 1. 从Redis获取历史对话
+            List<AIChatMessage> history = getHistory(userId);
+            
+            // 2. 下载图片并转换为Base64（通义千问支持data:image格式）
+            String imageBase64 = downloadAndEncodeImage(imageUrl);
+            
+            // 3. 构造包含图片的消息
+            Map<String, Object> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            
+            // 构造content数组（包含文本和图片）
+            List<Map<String, Object>> content = new ArrayList<>();
+            
+            // 添加文本内容
+            Map<String, Object> textContent = new HashMap<>();
+            textContent.put("type", "text");
+            textContent.put("text", message);
+            content.add(textContent);
+            
+            // 添加图片内容（使用Base64格式）
+            Map<String, Object> imageContent = new HashMap<>();
+            imageContent.put("type", "image_url");
+            Map<String, String> imageUrlMap = new HashMap<>();
+            imageUrlMap.put("url", imageBase64);  // data:image/jpeg;base64,xxxxx
+            imageContent.put("image_url", imageUrlMap);
+            content.add(imageContent);
+            
+            userMessage.put("content", content);
+            
+            // 3. 构建请求体
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", visionModel);  // 使用视觉模型
+            
+            List<Object> messages = new ArrayList<>();
+            // 添加历史对话（纯文本）
+            for (AIChatMessage msg : history) {
+                Map<String, Object> historyMsg = new HashMap<>();
+                historyMsg.put("role", msg.getRole());
+                historyMsg.put("content", msg.getContent());
+                messages.add(historyMsg);
+            }
+            // 添加当前消息（包含图片）
+            messages.add(userMessage);
+            
+            requestBody.put("messages", messages);
+            
+            // 4. 调用通义千问视觉API
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            
+            log.info("调用AI Vision API，用户：{}", userId);
+            
+            ResponseEntity<String> response = restTemplate.exchange(
+                apiUrl,
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            
+            // 5. 解析响应
+            JsonNode root = objectMapper.readTree(response.getBody());
+            String aiReply = root.path("choices").get(0).path("message").path("content").asText();
+            int tokensUsed = root.path("usage").path("total_tokens").asInt(0);
+            
+            log.info("AI Vision回复成功，用户：{}，tokens：{}", userId, tokensUsed);
+            
+            // 6. 保存到历史（简化为文本，方便后续对话）
+            history.add(AIChatMessage.builder()
+                    .role("user")
+                    .content(message + " [图片]")
+                    .build());
+            
+            history.add(AIChatMessage.builder()
+                    .role("assistant")
+                    .content(aiReply)
+                    .build());
+            
+            // 7. 限制历史长度
+            if (history.size() > maxHistory * 2) {
+                history = history.subList(history.size() - maxHistory * 2, history.size());
+            }
+            
+            // 8. 保存到Redis
+            saveHistory(userId, history);
+            
+            // 9. 保存到数据库（图文消息）
+            saveImageMessageToDatabase(userId, message, imageUrl, aiReply, tokensUsed);
+            
+            return AIResponse.builder()
+                    .reply(aiReply)
+                    .tokensUsed(tokensUsed)
+                    .conversationRound(history.size() / 2)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("AI图文对话失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+            throw new RuntimeException("AI图像理解服务暂时不可用，请稍后重试");
+        }
+    }
+    
+    /**
+     * 保存图文对话到数据库
+     * 用户消息包含文本和图片，使用JSON格式存储
+     */
+    private void saveImageMessageToDatabase(String userId, String text, String imageUrl, String aiReply, int tokensUsed) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            
+            // 构造图文消息的JSON格式
+            Map<String, Object> imageMessage = new HashMap<>();
+            imageMessage.put("text", text);
+            imageMessage.put("imageUrl", imageUrl);
+            String imageMessageJson = objectMapper.writeValueAsString(imageMessage);
+            
+            // 保存用户消息（包含文本和图片）
+            Message userMsg = Message.builder()
+                    .messageId(UUID.randomUUID().toString())
+                    .fromUserId(userId)
+                    .toUserId(AI_ASSISTANT_ID)
+                    .content(imageMessageJson)  // JSON格式：{"text":"...", "imageUrl":"..."}
+                    .messageType(3)  // 3 = AI对话
+                    .status(1)
+                    .createdAt(now)
+                    .build();
+            messageService.insert(userMsg);
+            
+            // 保存AI回复
+            Message aiMsg = Message.builder()
+                    .messageId(UUID.randomUUID().toString())
+                    .fromUserId(AI_ASSISTANT_ID)
+                    .toUserId(userId)
+                    .content(aiReply)
+                    .messageType(3)
+                    .status(1)
+                    .createdAt(now)
+                    .build();
+            messageService.insert(aiMsg);
+            
+            log.info("AI图文对话已保存到数据库，用户：{}，tokens：{}", userId, tokensUsed);
+        } catch (Exception e) {
+            // 数据库保存失败不影响主流程
+            log.error("保存AI图文对话到数据库失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 下载图片并转换为Base64格式
+     * 通义千问支持 data:image/jpeg;base64,xxx 格式
+     */
+    private String downloadAndEncodeImage(String imageUrl) {
+        try {
+            log.info("开始下载图片: {}", imageUrl);
+            
+            // 下载图片
+            URL url = new URL(imageUrl);
+            InputStream inputStream = url.openStream();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            
+            byte[] imageBytes = outputStream.toByteArray();
+            inputStream.close();
+            outputStream.close();
+            
+            // 转换为Base64
+            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+            
+            // 检测图片类型（简单判断）
+            String mimeType = "image/jpeg";  // 默认jpeg
+            if (imageUrl.toLowerCase().endsWith(".png")) {
+                mimeType = "image/png";
+            } else if (imageUrl.toLowerCase().endsWith(".gif")) {
+                mimeType = "image/gif";
+            } else if (imageUrl.toLowerCase().endsWith(".webp")) {
+                mimeType = "image/webp";
+            }
+            
+            // 构造data URL格式
+            String dataUrl = "data:" + mimeType + ";base64," + base64Image;
+            
+            log.info("图片转换为Base64成功，大小: {} bytes", imageBytes.length);
+            
+            return dataUrl;
+            
+        } catch (Exception e) {
+            log.error("下载并转换图片失败: {}", e.getMessage(), e);
+            throw new RuntimeException("图片处理失败，请确保图片URL可访问");
+        }
+    }
+    
+    @Override
+    public String uploadDocument(byte[] fileBytes, String fileName) {
+        try {
+            log.info("开始上传文档到通义千问，文件名：{}，大小：{} bytes", fileName, fileBytes.length);
+            
+            // 构造multipart/form-data请求
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.setBearerAuth(apiKey);
+            
+            // 创建文件资源
+            ByteArrayResource fileResource = new ByteArrayResource(fileBytes) {
+                @Override
+                public String getFilename() {
+                    return fileName;
+                }
+            };
+            
+            // 构造请求body
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", fileResource);
+            body.add("purpose", "file-extract");
+            
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = 
+                new HttpEntity<>(body, headers);
+            
+            // 发送请求
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                fileUploadUrl,
+                requestEntity,
+                String.class
+            );
+            
+            // 解析返回的file_id
+            JsonNode root = objectMapper.readTree(response.getBody());
+            String fileId = root.path("id").asText();
+            
+            if (fileId == null || fileId.isEmpty()) {
+                throw new RuntimeException("上传文档失败，未获取到file_id");
+            }
+            
+            log.info("文档上传成功，file_id：{}", fileId);
+            return fileId;
+            
+        } catch (Exception e) {
+            log.error("上传文档到通义千问失败：{}", e.getMessage(), e);
+            throw new RuntimeException("文档上传失败：" + e.getMessage());
+        }
+    }
+    
+    @Override
+    public AIResponse chatWithDocument(String userId, String message, String fileId) {
+        try {
+            log.info("开始文档对话，用户：{}，消息：{}，fileId：{}", userId, message, fileId);
+            
+            // 1. 从Redis获取历史对话
+            List<AIChatMessage> history = getHistory(userId);
+            
+            // 2. 构建请求
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", documentModel);  // 使用qwen-long模型
+            
+            List<Object> messages = new ArrayList<>();
+            
+            // 添加system message（引用文档）
+            Map<String, Object> systemMsg = new HashMap<>();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", "You are a helpful assistant.");
+            messages.add(systemMsg);
+            
+            // 添加fileId引用
+            Map<String, Object> fileRefMsg = new HashMap<>();
+            fileRefMsg.put("role", "system");
+            fileRefMsg.put("content", "fileid://" + fileId);
+            messages.add(fileRefMsg);
+            
+            // 添加历史对话（纯文本）
+            for (AIChatMessage msg : history) {
+                Map<String, Object> historyMsg = new HashMap<>();
+                historyMsg.put("role", msg.getRole());
+                historyMsg.put("content", msg.getContent());
+                messages.add(historyMsg);
+            }
+            
+            // 添加用户消息
+            Map<String, Object> userMsg = new HashMap<>();
+            userMsg.put("role", "user");
+            userMsg.put("content", message);
+            messages.add(userMsg);
+            
+            requestBody.put("messages", messages);
+            
+            // 3. 调用通义千问API
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(apiKey);
+            
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            
+            log.info("调用qwen-long API，用户：{}", userId);
+            
+            ResponseEntity<String> response = restTemplate.exchange(
+                apiUrl,
+                HttpMethod.POST,
+                entity,
+                String.class
+            );
+            
+            // 4. 解析响应
+            JsonNode root = objectMapper.readTree(response.getBody());
+            String aiReply = root.path("choices").get(0).path("message").path("content").asText();
+            int tokensUsed = root.path("usage").path("total_tokens").asInt(0);
+            
+            log.info("文档对话成功，用户：{}，tokens：{}", userId, tokensUsed);
+            
+            // 5. 保存到历史
+            history.add(AIChatMessage.builder()
+                    .role("user")
+                    .content(message + " [文档]")
+                    .build());
+            
+            history.add(AIChatMessage.builder()
+                    .role("assistant")
+                    .content(aiReply)
+                    .build());
+            
+            // 6. 限制历史长度
+            if (history.size() > maxHistory * 2) {
+                history = history.subList(history.size() - maxHistory * 2, history.size());
+            }
+            
+            // 7. 保存到Redis
+            saveHistory(userId, history);
+            
+            // 8. 保存到数据库
+            saveToDatabase(userId, message + " [文档: " + fileId + "]", aiReply, tokensUsed);
+            
+            return AIResponse.builder()
+                    .reply(aiReply)
+                    .tokensUsed(tokensUsed)
+                    .conversationRound(history.size() / 2)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("文档对话失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+            throw new RuntimeException("文档理解服务暂时不可用，请稍后重试");
         }
     }
 }

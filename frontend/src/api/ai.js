@@ -1,67 +1,4 @@
-import axios from 'axios'
-import { ElMessage } from 'element-plus'
-
-// 从环境变量读取 API 地址
-// 生产环境使用相对路径（通过 Nginx 反向代理），开发环境使用 localhost
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8080' : '')
-
-// 创建axios实例
-const request = axios.create({
-  baseURL: BASE_URL,
-  timeout: 30000,  // AI响应可能较慢，设置30秒超时
-  withCredentials: true  // 携带 Cookie（Session）
-})
-
-// 响应拦截器：统一处理后端 Result 格式
-request.interceptors.response.use(
-  (response) => {
-    const result = response.data
-    
-    // 如果是 Result 格式 { code, message, data }
-    if (result && typeof result.code !== 'undefined') {
-      if (result.code === 200) {
-        // 成功：直接返回 data 部分
-        return { ...response, data: result.data }
-      } else {
-        // 失败：显示错误信息并抛出异常
-        ElMessage.error(result.message || '请求失败')
-        return Promise.reject(new Error(result.message || '请求失败'))
-      }
-    }
-    
-    // 如果不是 Result 格式，直接返回
-    return response
-  },
-  (error) => {
-    console.error('AI请求错误:', error)
-    
-    // 处理401未授权错误：session过期
-    if (error.response && error.response.status === 401) {
-      ElMessage.error('登录已过期，请重新登录')
-      
-      // 清除前端登录状态
-      localStorage.removeItem('userId')
-      localStorage.removeItem('nickname')
-      localStorage.removeItem('avatar')
-      localStorage.removeItem('email')
-      
-      // 跳转到登录页
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 1500)
-      
-      return Promise.reject(new Error('未登录或登录已过期'))
-    }
-    
-    // 处理其他网络错误
-    if (error.message.includes('timeout')) {
-      ElMessage.error('AI响应超时，请稍后重试')
-    } else {
-      ElMessage.error(error.message || 'AI服务暂时不可用')
-    }
-    return Promise.reject(error)
-  }
-)
+import { requestWithResponse as request } from './request'
 
 // AI聊天API
 export const aiApi = {
@@ -117,6 +54,53 @@ export const aiApi = {
   getHistory(userId) {
     return request.get('/ai/history', {
       params: { userId }
+    })
+  },
+  
+  /**
+   * 与AI进行图文对话
+   * @param {string} userId - 用户ID
+   * @param {string} message - 用户消息
+   * @param {string} imageUrl - 图片URL
+   * @returns {Promise} AI响应
+   */
+  chatWithImage(userId, message, imageUrl) {
+    return request.post('/ai/chat-with-image', {
+      userId,
+      message,
+      imageUrl
+    })
+  },
+  
+  /**
+   * 上传文档到通义千问，获取file_id
+   * @param {File} file - 文件对象
+   * @returns {Promise<string>} file_id
+   */
+  async uploadDocument(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await request.post('/ai/upload-document', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data  // 返回file_id
+  },
+  
+  /**
+   * 与AI进行文档对话
+   * @param {string} userId - 用户ID
+   * @param {string} message - 用户消息
+   * @param {string} fileId - 通义千问的file_id
+   * @returns {Promise} AI响应
+   */
+  chatWithDocument(userId, message, fileId) {
+    return request.post('/ai/chat-with-document', {
+      userId,
+      message,
+      fileId
     })
   }
 }

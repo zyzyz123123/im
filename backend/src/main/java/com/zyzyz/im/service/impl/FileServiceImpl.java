@@ -1,18 +1,20 @@
 package com.zyzyz.im.service.impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
 import com.zyzyz.im.service.FileService;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
-import io.minio.GetPresignedObjectUrlArgs;
-import io.minio.http.Method;
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.SetBucketPolicyArgs;
 import com.zyzyz.im.config.MinioConfig;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class FileServiceImpl implements FileService {
@@ -21,6 +23,63 @@ public class FileServiceImpl implements FileService {
 
     @Autowired
     private MinioConfig minioConfig;
+    
+    @Value("${minio.publicUrl:}")
+    private String minioPublicUrl;
+    
+    /**
+     * 初始化 MinIO bucket，设置为公开访问
+     */
+    @PostConstruct
+    public void initBucket() {
+        try {
+            String bucketName = minioConfig.getBucketName();
+            
+            // 检查 bucket 是否存在
+            boolean exists = minioClient.bucketExists(
+                BucketExistsArgs.builder()
+                    .bucket(bucketName)
+                    .build()
+            );
+            
+            // 如果不存在，创建 bucket
+            if (!exists) {
+                minioClient.makeBucket(
+                    MakeBucketArgs.builder()
+                        .bucket(bucketName)
+                        .build()
+                );
+                System.out.println("创建 MinIO bucket: " + bucketName);
+            }
+            
+            // 设置 bucket 为公开可读（允许匿名访问）
+            String policy = String.format("""
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {"AWS": ["*"]},
+                            "Action": ["s3:GetObject"],
+                            "Resource": ["arn:aws:s3:::%s/*"]
+                        }
+                    ]
+                }
+                """, bucketName);
+            
+            minioClient.setBucketPolicy(
+                SetBucketPolicyArgs.builder()
+                    .bucket(bucketName)
+                    .config(policy)
+                    .build()
+            );
+            
+            System.out.println("MinIO bucket 配置完成，已设置为公开访问: " + bucketName);
+        } catch (Exception e) {
+            System.err.println("初始化 MinIO bucket 失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public String uploadFile(MultipartFile file, String fileType) throws Exception {
@@ -38,15 +97,17 @@ public class FileServiceImpl implements FileService {
                 .build()
         );
         
-        // 生成7天有效期的预签名URL
-        String url = minioClient.getPresignedObjectUrl(
-            GetPresignedObjectUrlArgs.builder()
-                .bucket(minioConfig.getBucketName())
-                .object(objectKey)
-                .method(Method.valueOf("GET"))
-                .expiry(7, TimeUnit.DAYS)  // 7天有效期
-                .build()
-        ).toString();
+        // 返回通过 Nginx 代理的公开访问 URL
+        // 格式：/minio/bucket-name/object-key
+        String url;
+        if (minioPublicUrl != null && !minioPublicUrl.isEmpty()) {
+            // 如果配置了公开访问地址，使用配置的地址（生产环境可用完整域名）
+            url = minioPublicUrl + "/" + minioConfig.getBucketName() + "/" + objectKey;
+        } else {
+            // 否则返回相对路径，通过 Nginx 代理访问
+            url = "/minio/" + minioConfig.getBucketName() + "/" + objectKey;
+        }
+        
         return url;
     }
     
