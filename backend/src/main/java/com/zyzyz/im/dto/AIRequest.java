@@ -37,5 +37,10 @@ public class AIRequest {
      * 文档ID（可选，用于文档对话，通义千问的file_id）
      */
     private String fileId;
+    
+    /**
+     * 文档名称（可选，用于保存文档消息）
+     */
+    private String fileName;
 }
 

@@ -68,6 +68,9 @@ public class AIServiceImpl implements AIService {
     @Value("${ai.maxHistory:10}")
     private Integer maxHistory;
     
+    @Value("${ai.minioEndpoint:http://localhost:9000}")
+    private String minioEndpoint;
+    
     private final RedisTemplate<String, Object> redisTemplate;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -384,6 +387,52 @@ public class AIServiceImpl implements AIService {
     }
     
     /**
+     * 保存文档对话到数据库
+     * 用户消息包含文本和文档ID、文件名，使用JSON格式存储（和图片消息一样）
+     */
+    private void saveDocumentMessageToDatabase(String userId, String text, String fileId, String fileName, String aiReply, int tokensUsed) {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            
+            // 构造文档消息的JSON格式（和图片消息一样）
+            Map<String, Object> documentMessage = new HashMap<>();
+            documentMessage.put("text", text);
+            documentMessage.put("fileId", fileId);
+            documentMessage.put("fileName", fileName != null ? fileName : "文档");
+            String documentMessageJson = objectMapper.writeValueAsString(documentMessage);
+            
+            // 保存用户消息（包含文本和文档信息）
+            Message userMsg = Message.builder()
+                    .messageId(UUID.randomUUID().toString())
+                    .fromUserId(userId)
+                    .toUserId(AI_ASSISTANT_ID)
+                    .content(documentMessageJson)  // JSON格式：{"text":"...", "fileId":"...", "fileName":"..."}
+                    .messageType(3)  // 3 = AI对话
+                    .status(1)
+                    .createdAt(now)
+                    .build();
+            messageService.insert(userMsg);
+            
+            // 保存AI回复
+            Message aiMsg = Message.builder()
+                    .messageId(UUID.randomUUID().toString())
+                    .fromUserId(AI_ASSISTANT_ID)
+                    .toUserId(userId)
+                    .content(aiReply)
+                    .messageType(3)
+                    .status(1)
+                    .createdAt(now)
+                    .build();
+            messageService.insert(aiMsg);
+            
+            log.info("AI文档对话已保存到数据库，用户：{}，tokens：{}", userId, tokensUsed);
+        } catch (Exception e) {
+            // 数据库保存失败不影响主流程
+            log.error("保存AI文档对话到数据库失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+        }
+    }
+    
+    /**
      * 下载图片并转换为Base64格式
      * 通义千问支持 data:image/jpeg;base64,xxx 格式
      */
@@ -391,8 +440,16 @@ public class AIServiceImpl implements AIService {
         try {
             log.info("开始下载图片: {}", imageUrl);
             
+            // 处理相对路径：将 /minio/bucket/file 转换为完整的 MinIO URL
+            String actualUrl = imageUrl;
+            if (imageUrl.startsWith("/minio/")) {
+                // 去掉 /minio/ 前缀，使用配置的 MinIO 访问地址
+                actualUrl = minioEndpoint + imageUrl.substring(6);
+                log.info("转换相对路径为完整URL: {} -> {}", imageUrl, actualUrl);
+            }
+            
             // 下载图片
-            URL url = new URL(imageUrl);
+            URL url = new URL(actualUrl);
             InputStream inputStream = url.openStream();
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             
@@ -483,9 +540,9 @@ public class AIServiceImpl implements AIService {
     }
     
     @Override
-    public AIResponse chatWithDocument(String userId, String message, String fileId) {
+    public AIResponse chatWithDocument(String userId, String message, String fileId, String fileName) {
         try {
-            log.info("开始文档对话，用户：{}，消息：{}，fileId：{}", userId, message, fileId);
+            log.info("开始文档对话，用户：{}，消息：{}，fileId：{}，fileName：{}", userId, message, fileId, fileName);
             
             // 1. 从Redis获取历史对话
             List<AIChatMessage> history = getHistory(userId);
@@ -566,8 +623,8 @@ public class AIServiceImpl implements AIService {
             // 7. 保存到Redis
             saveHistory(userId, history);
             
-            // 8. 保存到数据库
-            saveToDatabase(userId, message + " [文档: " + fileId + "]", aiReply, tokensUsed);
+            // 8. 保存到数据库（使用JSON格式，和图片消息一样）
+            saveDocumentMessageToDatabase(userId, message, fileId, fileName, aiReply, tokensUsed);
             
             return AIResponse.builder()
                     .reply(aiReply)

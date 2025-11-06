@@ -94,13 +94,15 @@ export const aiApi = {
    * @param {string} userId - 用户ID
    * @param {string} message - 用户消息
    * @param {string} fileId - 通义千问的file_id
+   * @param {string} fileName - 文档名称
    * @returns {Promise} AI响应
    */
-  chatWithDocument(userId, message, fileId) {
+  chatWithDocument(userId, message, fileId, fileName) {
     return request.post('/ai/chat-with-document', {
       userId,
       message,
-      fileId
+      fileId,
+      fileName
     })
   }
 }

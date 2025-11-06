@@ -8,6 +8,38 @@ import { ElMessage } from 'element-plus'
  */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8080' : '')
 
+// 防止重复显示401错误提示
+let isUnauthorizedShown = false
+let isRedirecting = false
+
+/**
+ * 统一的401错误处理函数
+ */
+const handle401Error = () => {
+  // 使用原子性操作，避免竞态条件
+  if (isUnauthorizedShown || isRedirecting) {
+    return  // 已经处理过了，直接返回
+  }
+  
+  // 立即设置标志位，防止重复执行
+  isUnauthorizedShown = true
+  isRedirecting = true
+  
+  // 清除前端登录状态
+  localStorage.removeItem('userId')
+  localStorage.removeItem('nickname')
+  localStorage.removeItem('avatar')
+  localStorage.removeItem('email')
+  
+  // 显示提示（只会显示一次）
+  ElMessage.error('登录已过期，请重新登录')
+  
+  // 立即跳转到登录页
+  setTimeout(() => {
+    window.location.href = '/login'
+  }, 100)
+}
+
 /**
  * 创建 axios 实例（用于普通 API，返回 data）
  */
@@ -51,8 +83,13 @@ request.interceptors.response.use(
       if (res.code === 200) {
         return res.data  // 只返回 data 字段
       } else {
+        // 检查是否是未登录的业务错误（静默处理）
+        if (res.message === '未登录' || res.message === '未登录或登录已过期') {
+          handle401Error()
+          return Promise.reject(new Error('未登录'))
+        }
+        // 其他业务错误：只打印，不显示提示（让业务层决定如何提示）
         console.error('业务错误:', res.message)
-        ElMessage.error(res.message || '请求失败')
         return Promise.reject(new Error(res.message || '请求失败'))
       }
     }
@@ -60,27 +97,14 @@ request.interceptors.response.use(
     return response
   },
   (error) => {
-    console.error('响应错误:', error)
-    
-    // 处理401未授权错误：session过期
+    // 处理401未授权错误：session过期（静默处理，不打印日志）
     if (error.response && error.response.status === 401) {
-      ElMessage.error('登录已过期，请重新登录')
-      
-      // 清除前端登录状态
-      localStorage.removeItem('userId')
-      localStorage.removeItem('nickname')
-      localStorage.removeItem('avatar')
-      localStorage.removeItem('email')
-      
-      // 跳转到登录页
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 1500)
-      
-      return Promise.reject(new Error('未登录或登录已过期'))
+      handle401Error()
+      return Promise.reject(new Error('未登录'))
     }
     
-    ElMessage.error(error.message || '网络错误')
+    // 其他错误只打印，不显示提示（让业务层决定如何提示）
+    console.error('响应错误:', error)
     return Promise.reject(error)
   }
 )
@@ -96,7 +120,13 @@ requestWithResponse.interceptors.response.use(
       if (result.code === 200) {
         return { ...response, data: result.data }
       } else {
-        ElMessage.error(result.message || '请求失败')
+        // 检查是否是未登录的业务错误（静默处理）
+        if (result.message === '未登录' || result.message === '未登录或登录已过期') {
+          handle401Error()
+          return Promise.reject(new Error('未登录'))
+        }
+        // 其他业务错误：只打印，不显示提示（让业务层决定如何提示）
+        console.error('业务错误:', result.message)
         return Promise.reject(new Error(result.message || '请求失败'))
       }
     }
@@ -104,30 +134,16 @@ requestWithResponse.interceptors.response.use(
     return response
   },
   (error) => {
-    console.error('响应错误:', error)
-    
-    // 处理401未授权错误：session过期
+    // 处理401未授权错误：session过期（静默处理，不打印日志）
     if (error.response && error.response.status === 401) {
-      ElMessage.error('登录已过期，请重新登录')
-      
-      // 清除前端登录状态
-      localStorage.removeItem('userId')
-      localStorage.removeItem('nickname')
-      localStorage.removeItem('avatar')
-      localStorage.removeItem('email')
-      
-      // 跳转到登录页
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 1500)
-      
-      return Promise.reject(new Error('未登录或登录已过期'))
+      handle401Error()
+      return Promise.reject(new Error('未登录'))
     }
     
-    ElMessage.error(error.message || '网络错误')
+    // 其他错误只打印，不显示提示（让业务层决定如何提示）
+    console.error('响应错误:', error)
     return Promise.reject(error)
   }
 )
 
 export default request
-

@@ -56,8 +56,9 @@ public interface AIService {
      * @param userId 用户ID
      * @param message 用户消息
      * @param fileId 通义千问的file_id
+     * @param fileName 文档名称
      * @return AI响应
      */
-    AIResponse chatWithDocument(String userId, String message, String fileId);
+    AIResponse chatWithDocument(String userId, String message, String fileId, String fileName);
 }
 

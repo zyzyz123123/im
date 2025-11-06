@@ -991,14 +991,17 @@ const isSendingDocToAI = ref(false)
     }
     
     try {
+      // 先测试一个轻量级API，检查session是否有效
+      await loadOnlineUsers()
+      
+      // session有效，继续初始化
       // 连接WebSocket（使用 Session 鉴权，Cookie 会自动发送）
       await wsClient.connect(userStore.userId)
       
       // 监听消息
       wsClient.onMessage(handleReceiveMessage)
       
-      // 加载在线用户、最近联系人和群组
-      await loadOnlineUsers()
+      // 加载其他数据
       await loadRecentContacts()
       await loadRecentGroups()
       await loadUserGroups()
@@ -1006,13 +1009,16 @@ const isSendingDocToAI = ref(false)
       // 所有初始化完成后才显示成功提示
       ElMessage.success('连接成功')
     } catch (error) {
+      // 如果是未登录错误，拦截器已经处理了跳转，这里完全静默
+      if (error.message === '未登录') {
+        // 不打印错误，不做任何处理，静默退出
+        return
+      }
+      
+      // 只有非未登录错误才打印和处理
       console.error('初始化失败:', error)
-      ElMessage.error('连接失败，登录可能已过期，请重新登录')
-      
-      // 清除前端登录状态
+      ElMessage.error('连接失败，请稍后重试')
       userStore.logout()
-      
-      // 跳转到登录页
       setTimeout(() => {
         router.push('/login')
       }, 1500)
@@ -1041,6 +1047,10 @@ const isSendingDocToAI = ref(false)
       
       console.log('在线用户列表:', onlineUsers.value)
     } catch (error) {
+      // 如果是未登录错误，重新抛出让上层处理
+      if (error.message === '未登录') {
+        throw error
+      }
       console.error('加载在线用户失败:', error)
     }
   }
@@ -1059,6 +1069,10 @@ const isSendingDocToAI = ref(false)
       
       console.log('最近联系人列表:', recentContacts.value)
     } catch (error) {
+      // 如果是未登录错误，重新抛出让上层处理
+      if (error.message === '未登录') {
+        throw error
+      }
       console.error('加载最近联系人失败:', error)
     }
   }
@@ -1070,6 +1084,10 @@ const isSendingDocToAI = ref(false)
       recentGroups.value = response.data || []
       console.log('最近群聊列表:', recentGroups.value)
     } catch (error) {
+      // 如果是未登录错误，重新抛出让上层处理
+      if (error.message === '未登录') {
+        throw error
+      }
       console.error('加载最近群聊失败:', error)
     }
   }
@@ -1081,6 +1099,10 @@ const isSendingDocToAI = ref(false)
       groupList.value = response.data || []
       console.log('群组列表:', groupList.value)
     } catch (error) {
+      // 如果是未登录错误，重新抛出让上层处理
+      if (error.message === '未登录') {
+        throw error
+      }
       console.error('加载群组列表失败:', error)
     }
   }
@@ -2512,7 +2534,8 @@ const isSendingDocToAI = ref(false)
       const response = await aiApi.chatWithDocument(
         userStore.userId,
         documentQuestion.value,
-        fileId
+        fileId,
+        selectedDocumentForAI.value.name
       )
       
       // 7. 添加AI回复到消息列表
@@ -3070,6 +3093,15 @@ const isSendingDocToAI = ref(false)
     min-width: 80px;
   }
   
+  /* 气泡内子元素对齐 */
+  .message-item.sent .message-bubble {
+    align-items: flex-end;
+  }
+  
+  .message-item.received .message-bubble {
+    align-items: flex-start;
+  }
+  
   .message-sender {
     font-size: 12px;
     color: #999;
@@ -3531,6 +3563,16 @@ const isSendingDocToAI = ref(false)
   .message-image-text {
     display: flex;
     flex-direction: column;
+    width: fit-content;
+    max-width: 100%;
+  }
+  
+  .message-item.sent .message-image-text {
+    align-items: flex-end;
+  }
+  
+  .message-item.received .message-image-text {
+    align-items: flex-start;
   }
   
   /* AI文档上传对话框样式 */
@@ -3593,6 +3635,16 @@ const isSendingDocToAI = ref(false)
   .message-document {
     display: flex;
     flex-direction: column;
+    width: fit-content;
+    max-width: 100%;
+  }
+  
+  .message-item.sent .message-document {
+    align-items: flex-end;
+  }
+  
+  .message-item.received .message-document {
+    align-items: flex-start;
   }
   
   .document-card {

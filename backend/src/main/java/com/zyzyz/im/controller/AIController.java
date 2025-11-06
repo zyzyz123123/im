@@ -148,8 +148,8 @@ public class AIController {
      */
     @PostMapping("/chat-with-document")
     public Result<AIResponse> chatWithDocument(@RequestBody AIRequest request) {
-        log.info("收到AI文档对话请求，用户：{}，消息：{}，fileId：{}", 
-                 request.getUserId(), request.getMessage(), request.getFileId());
+        log.info("收到AI文档对话请求，用户：{}，消息：{}，fileId：{}，fileName：{}", 
+                 request.getUserId(), request.getMessage(), request.getFileId(), request.getFileName());
         
         if (request.getFileId() == null || request.getFileId().trim().isEmpty()) {
             return Result.error("文档ID不能为空");
@@ -158,7 +158,8 @@ public class AIController {
         AIResponse response = aiService.chatWithDocument(
             request.getUserId(), 
             request.getMessage(), 
-            request.getFileId()
+            request.getFileId(),
+            request.getFileName()
         );
         return Result.success(response);
     }
