@@ -183,7 +183,7 @@ local_build() {
     cp backend/Dockerfile deploy/backend/
     cp frontend/Dockerfile deploy/frontend/
     cp backend/src/main/resources/application-prod.properties deploy/backend/ 2>/dev/null || true
-    [ -f .env ] && cp .env deploy/
+    
     [ -f env.example.txt ] && cp env.example.txt deploy/
     
     echo ""

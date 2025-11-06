@@ -66,10 +66,20 @@ cd $REMOTE_PATH
 
 echo "备份当前版本..."
 if [ -f "docker-compose.yml" ]; then
-    tar czf ../im-backup-\$(date +%Y%m%d-%H%M%S).tar.gz . 2>/dev/null || true
+    # 只备份重要文件，不备份垃圾
+    tar czf ../im-backup-\$(date +%Y%m%d-%H%M%S).tar.gz \
+        --exclude='*.tar.gz' \
+        --exclude='target' \
+        --exclude='*.bak' \
+        --exclude='*backup*' \
+        . 2>/dev/null || true
 else
     echo "首次部署，跳过备份"
 fi
+
+echo "清理旧文件（保留 .env 和数据卷）..."
+find . -maxdepth 1 -type f ! -name '.env' ! -name '.gitignore' -delete 2>/dev/null || true
+find . -maxdepth 1 -type d ! -name '.' ! -name '..' ! -name 'docker' -exec rm -rf {} + 2>/dev/null || true
 
 echo "解压新版本..."
 tar xzf /tmp/deploy.tar.gz --strip-components=1
