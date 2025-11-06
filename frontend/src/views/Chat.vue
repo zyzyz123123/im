@@ -987,117 +987,6 @@ const isSendingDocToAI = ref(false)
     })
   })
   
-  // ==================== AI消息本地存储相关 ====================
-  const PENDING_AI_MESSAGE_KEY = 'pendingAIMessage'
-  
-  // 保存待处理的AI消息到 localStorage
-  const savePendingAIMessage = (message) => {
-    try {
-      const pendingMessage = {
-        ...message,
-        timestamp: Date.now(),
-        userId: userStore.userId  // 记录用户ID，防止串号
-      }
-      localStorage.setItem(PENDING_AI_MESSAGE_KEY, JSON.stringify(pendingMessage))
-      console.log('已保存待处理AI消息到本地存储')
-    } catch (error) {
-      console.error('保存待处理消息失败:', error)
-    }
-  }
-  
-  // 清除待处理的AI消息
-  const clearPendingAIMessage = () => {
-    try {
-      localStorage.removeItem(PENDING_AI_MESSAGE_KEY)
-      console.log('已清除待处理AI消息')
-    } catch (error) {
-      console.error('清除待处理消息失败:', error)
-    }
-  }
-  
-  // 预加载AI历史消息（刷新时自动加载）
-  const preloadAIHistory = async () => {
-    try {
-      const response = await aiApi.getHistory(userStore.userId)
-      messages[AI_ASSISTANT_ID] = response.data || []
-      console.log('预加载AI历史消息:', messages[AI_ASSISTANT_ID].length, '条')
-    } catch (error) {
-      console.error('预加载AI历史消息失败:', error)
-      messages[AI_ASSISTANT_ID] = []
-    }
-  }
-  
-  // 恢复待处理的AI消息
-  const restorePendingAIMessage = async () => {
-    try {
-      const stored = localStorage.getItem(PENDING_AI_MESSAGE_KEY)
-      if (!stored) {
-        return
-      }
-      
-      const pendingMessage = JSON.parse(stored)
-      
-      // 检查用户ID是否匹配，防止串号
-      if (pendingMessage.userId !== userStore.userId) {
-        clearPendingAIMessage()
-        return
-      }
-      
-      // 检查是否过期（5分钟）
-      const now = Date.now()
-      const TIMEOUT = 5 * 60 * 1000  // 5分钟
-      if (now - pendingMessage.timestamp > TIMEOUT) {
-        console.log('待处理AI消息已过期，自动清除')
-        clearPendingAIMessage()
-        return
-      }
-      
-      // 检查消息是否已经入库（通过内容匹配）
-      const pendingContent = pendingMessage.content
-      const alreadyExists = messages[AI_ASSISTANT_ID].some(msg => {
-        // 比对内容是否一致
-        return msg.content === pendingContent && msg.fromUserId === userStore.userId
-      })
-      
-      if (alreadyExists) {
-        // 消息已入库，直接清除缓存
-        console.log('待处理消息已入库，清除本地缓存')
-        clearPendingAIMessage()
-        
-        // 切换到AI助手（不显示转圈）
-        chatType.value = 'user'
-        currentChatUser.value = AI_ASSISTANT_ID
-        
-        ElMessage.success('AI对话已完成')
-      } else {
-        // 消息未入库，添加到列表并显示"发送中"
-        const restoredMessage = {
-          ...pendingMessage,
-          isPending: true  // 标记为发送中
-        }
-        delete restoredMessage.timestamp
-        delete restoredMessage.userId
-        
-        messages[AI_ASSISTANT_ID].push(restoredMessage)
-        
-        // 切换到AI助手
-        chatType.value = 'user'
-        currentChatUser.value = AI_ASSISTANT_ID
-        
-        ElMessage.info('检测到未完成的AI对话，已自动恢复（AI正在处理中...）')
-        
-        // 设置AI思考状态
-        isAIThinking.value = true
-        
-        console.log('已恢复待处理AI消息:', restoredMessage)
-      }
-    } catch (error) {
-      console.error('恢复待处理消息失败:', error)
-      clearPendingAIMessage()
-    }
-  }
-  // ==================== AI消息本地存储相关 END ====================
-  
   // 初始化
   onMounted(async () => {
     // 检查登录状态
@@ -1122,12 +1011,6 @@ const isSendingDocToAI = ref(false)
       await loadRecentContacts()
       await loadRecentGroups()
       await loadUserGroups()
-      
-      // 预加载AI历史消息（无论是否有缓存都加载）
-      await preloadAIHistory()
-      
-      // 恢复待处理的AI消息（如果有）
-      await restorePendingAIMessage()
       
       // 所有初始化完成后才显示成功提示
       ElMessage.success('连接成功')
@@ -2642,9 +2525,6 @@ const isSendingDocToAI = ref(false)
       }
       messages[AI_ASSISTANT_ID].push(userMsg)
       
-      // 2.1. 保存到本地存储（防止刷新丢失）
-      savePendingAIMessage(userMsg)
-      
       // 3. 关闭对话框
       showDocumentUploadDialog.value = false
       
@@ -2674,9 +2554,6 @@ const isSendingDocToAI = ref(false)
       
       messages[AI_ASSISTANT_ID].push(aiMsg)
       
-      // 7.1. 清除本地存储（对话完成）
-      clearPendingAIMessage()
-      
       // 8. 清空表单
       selectedDocumentForAI.value = null
       documentQuestion.value = ''
@@ -2694,8 +2571,6 @@ const isSendingDocToAI = ref(false)
     } catch (error) {
       console.error('发送失败:', error)
       ElMessage.error('发送失败：' + (error.message || '未知错误'))
-      // AI回复失败也清除本地存储，避免一直卡在"发送中"状态
-      clearPendingAIMessage()
     } finally {
       isAIThinking.value = false
       isSendingDocToAI.value = false
@@ -2733,9 +2608,6 @@ const isSendingDocToAI = ref(false)
       }
       messages[AI_ASSISTANT_ID].push(userMsg)
       
-      // 2.1. 保存到本地存储（防止刷新丢失）
-      savePendingAIMessage(userMsg)
-      
       // 3. 关闭对话框
       showImageUploadDialog.value = false
       
@@ -2763,9 +2635,6 @@ const isSendingDocToAI = ref(false)
       
       messages[AI_ASSISTANT_ID].push(aiMsg)
       
-      // 7.1. 清除本地存储（对话完成）
-      clearPendingAIMessage()
-      
       // 8. 清空表单
       selectedImageForAI.value = null
       selectedImagePreview.value = ''
@@ -2784,8 +2653,6 @@ const isSendingDocToAI = ref(false)
     } catch (error) {
       console.error('发送失败:', error)
       ElMessage.error('发送失败：' + (error.message || '未知错误'))
-      // AI回复失败也清除本地存储，避免一直卡在"发送中"状态
-      clearPendingAIMessage()
     } finally {
       isAIThinking.value = false
       isSendingImageToAI.value = false

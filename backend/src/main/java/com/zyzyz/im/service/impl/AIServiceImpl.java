@@ -238,10 +238,13 @@ public class AIServiceImpl implements AIService {
         try {
             log.info("开始图文对话，用户：{}，消息：{}，图片：{}", userId, message, imageUrl);
             
-            // 1. 从Redis获取历史对话
+            // 1. 立即保存用户消息到数据库
+            saveUserImageMessage(userId, message, imageUrl);
+            
+            // 2. 从Redis获取历史对话
             List<AIChatMessage> history = getHistory(userId);
             
-            // 2. 下载图片并转换为Base64（通义千问支持data:image格式）
+            // 3. 下载图片并转换为Base64（通义千问支持data:image格式）
             String imageBase64 = downloadAndEncodeImage(imageUrl);
             
             // 3. 构造包含图片的消息
@@ -326,8 +329,8 @@ public class AIServiceImpl implements AIService {
             // 8. 保存到Redis
             saveHistory(userId, history);
             
-            // 9. 保存到数据库（图文消息）
-            saveImageMessageToDatabase(userId, message, imageUrl, aiReply, tokensUsed);
+            // 9. 保存AI回复到数据库
+            saveAIReply(userId, aiReply, tokensUsed);
             
             return AIResponse.builder()
                     .reply(aiReply)
@@ -342,13 +345,10 @@ public class AIServiceImpl implements AIService {
     }
     
     /**
-     * 保存图文对话到数据库
-     * 用户消息包含文本和图片，使用JSON格式存储
+     * 保存用户的图文消息到数据库
      */
-    private void saveImageMessageToDatabase(String userId, String text, String imageUrl, String aiReply, int tokensUsed) {
+    private void saveUserImageMessage(String userId, String text, String imageUrl) {
         try {
-            LocalDateTime now = LocalDateTime.now();
-            
             // 构造图文消息的JSON格式
             Map<String, Object> imageMessage = new HashMap<>();
             imageMessage.put("text", text);
@@ -363,11 +363,21 @@ public class AIServiceImpl implements AIService {
                     .content(imageMessageJson)  // JSON格式：{"text":"...", "imageUrl":"..."}
                     .messageType(3)  // 3 = AI对话
                     .status(1)
-                    .createdAt(now)
+                    .createdAt(LocalDateTime.now())
                     .build();
             messageService.insert(userMsg);
             
-            // 保存AI回复
+            log.info("用户图文消息已保存到数据库，用户：{}", userId);
+        } catch (Exception e) {
+            log.error("保存用户图文消息失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 保存AI回复到数据库
+     */
+    private void saveAIReply(String userId, String aiReply, int tokensUsed) {
+        try {
             Message aiMsg = Message.builder()
                     .messageId(UUID.randomUUID().toString())
                     .fromUserId(AI_ASSISTANT_ID)
@@ -375,26 +385,22 @@ public class AIServiceImpl implements AIService {
                     .content(aiReply)
                     .messageType(3)
                     .status(1)
-                    .createdAt(now)
+                    .createdAt(LocalDateTime.now())
                     .build();
             messageService.insert(aiMsg);
             
-            log.info("AI图文对话已保存到数据库，用户：{}，tokens：{}", userId, tokensUsed);
+            log.info("AI回复已保存到数据库，用户：{}，tokens：{}", userId, tokensUsed);
         } catch (Exception e) {
-            // 数据库保存失败不影响主流程
-            log.error("保存AI图文对话到数据库失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+            log.error("保存AI回复失败，用户：{}，错误：{}", userId, e.getMessage(), e);
         }
     }
     
     /**
-     * 保存文档对话到数据库
-     * 用户消息包含文本和文档ID、文件名，使用JSON格式存储（和图片消息一样）
+     * 保存用户的文档消息到数据库
      */
-    private void saveDocumentMessageToDatabase(String userId, String text, String fileId, String fileName, String aiReply, int tokensUsed) {
+    private void saveUserDocumentMessage(String userId, String text, String fileId, String fileName) {
         try {
-            LocalDateTime now = LocalDateTime.now();
-            
-            // 构造文档消息的JSON格式（和图片消息一样）
+            // 构造文档消息的JSON格式
             Map<String, Object> documentMessage = new HashMap<>();
             documentMessage.put("text", text);
             documentMessage.put("fileId", fileId);
@@ -409,26 +415,13 @@ public class AIServiceImpl implements AIService {
                     .content(documentMessageJson)  // JSON格式：{"text":"...", "fileId":"...", "fileName":"..."}
                     .messageType(3)  // 3 = AI对话
                     .status(1)
-                    .createdAt(now)
+                    .createdAt(LocalDateTime.now())
                     .build();
             messageService.insert(userMsg);
             
-            // 保存AI回复
-            Message aiMsg = Message.builder()
-                    .messageId(UUID.randomUUID().toString())
-                    .fromUserId(AI_ASSISTANT_ID)
-                    .toUserId(userId)
-                    .content(aiReply)
-                    .messageType(3)
-                    .status(1)
-                    .createdAt(now)
-                    .build();
-            messageService.insert(aiMsg);
-            
-            log.info("AI文档对话已保存到数据库，用户：{}，tokens：{}", userId, tokensUsed);
+            log.info("用户文档消息已保存到数据库，用户：{}", userId);
         } catch (Exception e) {
-            // 数据库保存失败不影响主流程
-            log.error("保存AI文档对话到数据库失败，用户：{}，错误：{}", userId, e.getMessage(), e);
+            log.error("保存用户文档消息失败，用户：{}，错误：{}", userId, e.getMessage(), e);
         }
     }
     
@@ -544,7 +537,10 @@ public class AIServiceImpl implements AIService {
         try {
             log.info("开始文档对话，用户：{}，消息：{}，fileId：{}，fileName：{}", userId, message, fileId, fileName);
             
-            // 1. 从Redis获取历史对话
+            // 1. 立即保存用户消息到数据库
+            saveUserDocumentMessage(userId, message, fileId, fileName);
+            
+            // 2. 从Redis获取历史对话
             List<AIChatMessage> history = getHistory(userId);
             
             // 2. 构建请求
@@ -623,8 +619,8 @@ public class AIServiceImpl implements AIService {
             // 7. 保存到Redis
             saveHistory(userId, history);
             
-            // 8. 保存到数据库（使用JSON格式，和图片消息一样）
-            saveDocumentMessageToDatabase(userId, message, fileId, fileName, aiReply, tokensUsed);
+            // 8. 保存AI回复到数据库
+            saveAIReply(userId, aiReply, tokensUsed);
             
             return AIResponse.builder()
                     .reply(aiReply)
